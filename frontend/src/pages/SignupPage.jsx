@@ -38,6 +38,26 @@ export default function SignupPage() {
         <h3 className="text-lg text-studio-gold font-montserrat mb-4">
           ✨ Sign Up
         </h3>
+
+        <div className="mb-4 pb-4 border-b border-studio-white/20">
+          <button
+            type="button"
+            onClick={() => navigate('/login')}
+            disabled={loading}
+            className="text-base text-studio-gold hover:text-studio-gold/80 font-montserrat font-medium transition-colors disabled:opacity-50 underline"
+          >
+            Already have an account? Sign in
+          </button>
+        </div>
+
+        <div className="mb-4">
+          <h2 className="text-xl text-studio-white font-montserrat font-semibold mb-2">
+            Create Music Faster with AI-Powered Automation
+          </h2>
+          <p className="text-base text-studio-gold font-poppins font-medium">
+            Start your 3-Day Free Trial — No Credit Card Required.
+          </p>
+        </div>
         
         <div className="flex flex-col gap-4 mb-4">
           <GoogleSignInButton />
@@ -106,21 +126,10 @@ export default function SignupPage() {
                 Signing up...
               </span>
             ) : (
-              'Sign Up'
+              'Start Free Trial'
             )}
           </motion.button>
         </form>
-
-        <div className="text-center mt-4">
-          <button
-            type="button"
-            onClick={() => navigate('/login')}
-            disabled={loading}
-            className="text-sm text-studio-white/60 hover:text-studio-white font-poppins transition-colors disabled:opacity-50"
-          >
-            Already have an account? Sign in
-          </button>
-        </div>
       </motion.div>
     </div>
   );

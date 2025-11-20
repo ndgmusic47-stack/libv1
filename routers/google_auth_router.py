@@ -104,7 +104,7 @@ async def google_auth_callback(
             # Create user with no password (Google auth only)
             # Generate a random password hash that won't be used
             # Users authenticated via Google won't need password
-            dummy_password_hash = hash_password("google_oauth_user_no_password")
+            dummy_password_hash = hash_password("google_sso_nopass")
             
             user_data = {
                 "email": email,

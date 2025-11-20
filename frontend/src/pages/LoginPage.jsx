@@ -38,6 +38,17 @@ export default function LoginPage() {
         <h3 className="text-lg text-studio-gold font-montserrat mb-4">
           🔐 Sign In
         </h3>
+
+        <div className="mb-4 pb-4 border-b border-studio-white/20">
+          <button
+            type="button"
+            onClick={() => navigate('/signup')}
+            disabled={loading}
+            className="text-base text-studio-gold hover:text-studio-gold/80 font-montserrat font-medium transition-colors disabled:opacity-50 underline"
+          >
+            New here? Start Free Trial
+          </button>
+        </div>
         
         <div className="flex flex-col gap-4 mb-4">
           <GoogleSignInButton />
@@ -107,17 +118,6 @@ export default function LoginPage() {
             )}
           </motion.button>
         </form>
-
-        <div className="text-center mt-4">
-          <button
-            type="button"
-            onClick={() => navigate('/signup')}
-            disabled={loading}
-            className="text-sm text-studio-white/60 hover:text-studio-white font-poppins transition-colors disabled:opacity-50"
-          >
-            Don't have an account? Sign up
-          </button>
-        </div>
       </motion.div>
     </div>
   );
