@@ -71,6 +71,15 @@ export default function SignupPage() {
             <span className="px-2 bg-studio-gray text-studio-white/60 font-poppins">OR</span>
           </div>
         </div>
+
+        <div className="mb-4">
+          <h2 className="text-xl text-studio-white font-montserrat font-semibold mb-2">
+            Create Music Faster with AI-Powered Automation
+          </h2>
+          <p className="text-base text-studio-gold font-poppins font-medium">
+            Start your 3-Day Free Trial — No Credit Card Required.
+          </p>
+        </div>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>

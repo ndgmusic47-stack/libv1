@@ -46,7 +46,7 @@ export default function LoginPage() {
             disabled={loading}
             className="text-base text-studio-gold hover:text-studio-gold/80 font-montserrat font-medium transition-colors disabled:opacity-50 underline"
           >
-            New here? Start Free Trial
+            Don't have an account? Sign up
           </button>
         </div>
         
@@ -61,6 +61,17 @@ export default function LoginPage() {
           <div className="relative flex justify-center text-sm">
             <span className="px-2 bg-studio-gray text-studio-white/60 font-poppins">OR</span>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => navigate('/signup')}
+            disabled={loading}
+            className="text-base text-studio-gold hover:text-studio-gold/80 font-montserrat font-medium transition-colors disabled:opacity-50 underline"
+          >
+            New here? Start Free Trial
+          </button>
         </div>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">

@@ -80,13 +80,14 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
         
-        # Hash password
-        password_hash = hash_password(request.password)
+        # Hash password (truncate to 72 bytes to prevent bcrypt 500 error)
+        password_to_hash = request.password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
+        hashed_password = hash_password(password_to_hash)
         
         # Create new user
         user_data = {
             "email": request.email.lower(),
-            "hashed_password": password_hash,
+            "hashed_password": hashed_password,
             "is_active": True,
             "is_paid_user": False  # Default to free plan
         }
