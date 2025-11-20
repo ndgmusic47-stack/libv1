@@ -8,7 +8,10 @@ export default {
     extend: {
       colors: {
         'studio-black': '#0a0a0a',
+        'studio-dark': '#0a0a0a',
         'studio-gray': '#1a1a1a',
+        'studio-gold': '#FFB800',
+        'studio-indigo': '#4B0082',
         'studio-red': '#ff3366',
         'studio-white': '#f5f5f5',
       },

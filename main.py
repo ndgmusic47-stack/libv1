@@ -21,6 +21,7 @@ from routers.media_router import media_router
 from routers.release_router import release_router
 from routers.analytics_router import analytics_router
 from routers.social_router import social_router
+from routers.google_auth_router import google_auth_router
 from utils.rate_limit import RateLimiterMiddleware
 from database import init_db
 from config import settings
@@ -203,6 +204,7 @@ async def initialize_database():
 # INCLUDE ROUTERS
 # ============================================================================
 app.include_router(auth_router)
+app.include_router(google_auth_router)
 app.include_router(content_router)
 app.include_router(billing_router)
 app.include_router(beat_router)

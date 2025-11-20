@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     
     # Core authentication and security
     jwt_secret_key: Optional[str] = Field(default=None, alias="JWT_SECRET_KEY")
+    google_client_id: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_ID")
+    google_client_secret: Optional[str] = Field(default=None, alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: Optional[str] = Field(default=None, alias="GOOGLE_REDIRECT_URI")
     
     # Stripe billing configuration
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -27,7 +28,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-studio-dark flex items-center justify-center p-4">
+    <div className="min-h-screen bg-studio-indigo flex items-center justify-center p-4">
       <motion.div
         className="bg-studio-gray border border-studio-white/20 rounded-lg max-w-md w-full p-6"
         initial={{ opacity: 0, scale: 0.9 }}
@@ -37,6 +38,19 @@ export default function LoginPage() {
         <h3 className="text-lg text-studio-gold font-montserrat mb-4">
           🔐 Sign In
         </h3>
+        
+        <div className="flex flex-col gap-4 mb-4">
+          <GoogleSignInButton />
+        </div>
+
+        <div className="relative my-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-studio-white/20"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-studio-gray text-studio-white/60 font-poppins">OR</span>
+          </div>
+        </div>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>

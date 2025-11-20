@@ -27,3 +27,4 @@ pytest-asyncio
 httpx
 aiofiles
 redis
+authlib
