@@ -21,6 +21,7 @@ PyJWT
 passlib[bcrypt]
 stripe
 sqlalchemy
+psycopg2-binary
 aiosqlite
 pytest
 pytest-asyncio

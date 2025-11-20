@@ -1,3 +1,4 @@
+# FORENSIC BEACON — DEPLOYEDy9kXvPq2 — 20251120-224633
 """
 Google Single Sign-On (SSO) Router
 Handles Google OAuth authentication flow
