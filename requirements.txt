@@ -28,3 +28,5 @@ httpx
 aiofiles
 redis
 authlib
+itsdangerous
+starlette-session

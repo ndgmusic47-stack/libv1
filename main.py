@@ -11,6 +11,7 @@ from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -55,6 +56,9 @@ from backend.utils.responses import success_response, error_response
 
 app = FastAPI(title="Label in a Box v4 - Phase 2.2")
 
+# Default session secret key (fallback if SESSION_SECRET_KEY not set)
+DEFAULT_SESSION_SECRET = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
+
 # Uncaught exception middleware - logs all unhandled exceptions and returns 500
 class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -68,6 +72,13 @@ class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
             )
 
 app.add_middleware(UncaughtExceptionMiddleware)
+
+# Session middleware for Google SSO flow
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
+    max_age=7 * 24 * 60 * 60  # 7 days in seconds
+)
 
 # Phase 1: Required API keys for startup validation
 REQUIRED_KEYS = [
