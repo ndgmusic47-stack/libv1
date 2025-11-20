@@ -59,6 +59,11 @@ app = FastAPI(title="Label in a Box v4 - Phase 2.2")
 # Default session secret key (fallback if SESSION_SECRET_KEY not set)
 DEFAULT_SESSION_SECRET = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
 
+# Enforce HTTPS in production (Render)
+def _is_render_env() -> bool:
+    """Check if running in Render.com environment"""
+    return bool(settings.render or settings.render_external_url or settings.render_service_name)
+
 # Uncaught exception middleware - logs all unhandled exceptions and returns 500
 class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -77,7 +82,9 @@ app.add_middleware(UncaughtExceptionMiddleware)
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
-    max_age=7 * 24 * 60 * 60  # 7 days in seconds
+    max_age=7 * 24 * 60 * 60,  # 7 days in seconds
+    samesite='none',
+    https_only=_is_render_env()
 )
 
 # Phase 1: Required API keys for startup validation
@@ -113,11 +120,6 @@ app.add_middleware(
 )
 # Rate limiting middleware (Phase 1)
 app.add_middleware(RateLimiterMiddleware, requests_per_minute=30)
-
-# Enforce HTTPS in production (Render)
-def _is_render_env() -> bool:
-    """Check if running in Render.com environment"""
-    return bool(settings.render or settings.render_external_url or settings.render_service_name)
 
 class EnforceHTTPSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
