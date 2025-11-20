@@ -232,10 +232,15 @@ export const api = {
    formData.append('file', file);
    if (sessionId) formData.append('session_id', sessionId);
 
-  const response = await fetch(`${API_BASE}/upload-audio`, {
-    method: 'POST',
-    body: formData,
-  });
+   const token = localStorage.getItem("auth_token");
+   const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+
+   const response = await fetch(`${API_BASE}/upload-audio`, {
+     method: "POST",
+     headers,
+     credentials: "include",
+     body: formData,
+   });
    return handleResponse(response);
  },
 
