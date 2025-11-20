@@ -81,7 +81,11 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Email already registered")
         
         # Hash password (truncate to 72 bytes to prevent bcrypt 500 error)
-        password_to_hash = request.password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
+        if len(request.password) > 72:
+            raise HTTPException(status_code=400, detail="Password too long (max 72 characters)")
+        
+        # Safe, simple, works with emojis and all characters
+        password_to_hash = request.password[:72]
         hashed_password = hash_password(password_to_hash)
         
         # Create new user
