@@ -13,7 +13,7 @@ from services.release_service import ReleaseService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import get_session_media_path, log_endpoint_event, require_feature_pro
 from database import get_db
-from backend.orchestrator import ProjectOrchestrator
+from project_memory import get_or_create_project_memory
 from crud.user import UserRepository
 
 # Create router
@@ -332,18 +332,22 @@ async def build_release_pack(request: ReleaseBuildRequest):
             log_endpoint_event("/release/build", request.session_id, "error", {"error": error_msg})
             return error_response(error_msg, 400, error_msg, data=result.get("data", {}))
         
-        # Phase 6: Auto-save to orchestrator
-        orchestrator = ProjectOrchestrator(request.user_id, request.session_id)
+        # Phase 6: Auto-save to project memory
+        MEDIA_DIR = Path("./media")
+        memory = await get_or_create_project_memory(request.session_id, MEDIA_DIR, request.user_id)
         release_data = result.get("data", {})
         cover_url = release_data.get("cover_url")
         song_url = release_data.get("song_url")
         metadata_url = release_data.get("metadata_url")
-        orchestrator.update_stage("release", {
+        if "release" not in memory.project_data:
+            memory.project_data["release"] = {}
+        memory.project_data["release"].update({
             "cover_url": cover_url,
             "song_url": song_url,
             "metadata_url": metadata_url,
             "completed": True
         })
+        await memory.save()
         
         log_endpoint_event("/release/build", request.session_id, "success", {})
         return success_response(

@@ -5,6 +5,7 @@ import uuid
 import logging
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, Form, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 import aiofiles
@@ -15,7 +16,7 @@ from models.mix import CleanMixRequest
 from services.mix_service import MixService
 from utils.shared_utils import require_feature_pro, get_session_media_path
 from utils.security_utils import validate_uploaded_file
-from backend.orchestrator import ProjectOrchestrator
+from project_memory import get_or_create_project_memory
 from backend.utils.responses import success_response
 
 logger = logging.getLogger(__name__)
@@ -73,12 +74,17 @@ async def upload_audio(
     
     logger.info(f"File uploaded successfully: {sanitized_filename} (size: {len(file_content)} bytes) by user {user_id}")
     
-    # Phase 6: Auto-save to orchestrator
-    orchestrator = ProjectOrchestrator(user_id, session_id)
-    await orchestrator.update_stage("vocals", {
-        "vocal_url": file_url,
-        "completed": True
-    })
+    # Phase 6: Auto-save to project memory
+    MEDIA_DIR = Path("./media")
+    memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+    if "assets" not in memory.project_data:
+        memory.project_data["assets"] = {}
+    memory.project_data["assets"]["vocals"] = [{
+        "url": file_url,
+        "added_at": datetime.now().isoformat(),
+        "metadata": {}
+    }]
+    await memory.save()
     
     return success_response(
         data={
@@ -217,12 +223,16 @@ async def process_single_mix(
         # Generate public URL
         mix_url = f"/media/{user_id}/mix/master.wav"
         
-        # Update orchestrator stage
-        orchestrator = ProjectOrchestrator(user_id, session_id)
-        await orchestrator.update_stage("mix", {
+        # Update project memory
+        MEDIA_DIR = Path("./media")
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+        if "mix" not in memory.project_data:
+            memory.project_data["mix"] = {}
+        memory.project_data["mix"].update({
             "masterFile": mix_url,
             "completed": True
         })
+        await memory.save()
         
         return success_response(
             data={"mix_url": mix_url},

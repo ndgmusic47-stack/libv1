@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 
 from openai import OpenAI
 from project_memory import get_or_create_project_memory
-from backend.orchestrator import ProjectOrchestrator
 from utils.shared_utils import get_session_media_path, log_endpoint_event
 from config import settings
 
@@ -327,13 +326,16 @@ Make it authentic and emotionally resonant."""
             with open(project_file, "w", encoding="utf-8") as f:
                 json.dump(project, f, indent=2)
         
-        # Auto-save to orchestrator
-        orchestrator = ProjectOrchestrator(user_id, session_id)
-        orchestrator.update_stage("lyrics", {
+        # Auto-save to project memory
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+        if "lyrics" not in memory.project_data:
+            memory.project_data["lyrics"] = {}
+        memory.project_data["lyrics"].update({
             "text": lyrics_text,
             "meta": {},
             "completed": True
         })
+        await memory.save()
         
         log_endpoint_event("/lyrics/from_beat", session_id, "success", {"bpm": bpm, "mood": mood})
         

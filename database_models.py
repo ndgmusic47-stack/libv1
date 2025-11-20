@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from database import Base
 
 
@@ -21,6 +22,22 @@ class User(Base):
     stripe_price_id = Column(String, nullable=True)
     subscription_status = Column(String, default="trial", nullable=True)
     
-    # Relationship placeholder for future one-to-many linking (User to Project)
-    # projects = relationship("Project", back_populates="owner")
+    # Relationship for one-to-many linking (User to Project)
+    projects = relationship("Project", back_populates="owner")
+
+
+class Project(Base):
+    """
+    Project model for storing user project information.
+    """
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_id = Column(String, unique=True, nullable=False, index=True)
+    title = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationship back to User
+    owner = relationship("User", back_populates="projects")
 

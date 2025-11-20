@@ -8,7 +8,7 @@ from pydub import AudioSegment
 from pydub.effects import normalize
 from pydub.exceptions import CouldntDecodeError
 
-from backend.orchestrator import ProjectOrchestrator
+from project_memory import get_or_create_project_memory
 from backend.utils.responses import error_response, success_response
 
 
@@ -39,7 +39,7 @@ class MixService:
         
         Args:
             request: CleanMixRequest object with vocal_url, beat_url, session_id, etc.
-            user_id: User ID for orchestrator updates
+            user_id: User ID for project memory updates
             
         Returns:
             Success or error response dict
@@ -102,12 +102,16 @@ class MixService:
             # Return JSON
             mix_url = f"/sessions/{request.session_id}/mixed_output.wav"
             
-            # Update orchestrator
-            orchestrator = ProjectOrchestrator(user_id, request.session_id)
-            await orchestrator.update_stage("mix", {
+            # Update project memory
+            MEDIA_DIR = Path("./media")
+            memory = await get_or_create_project_memory(request.session_id, MEDIA_DIR, user_id)
+            if "mix" not in memory.project_data:
+                memory.project_data["mix"] = {}
+            memory.project_data["mix"].update({
                 "mix_url": mix_url,
                 "completed": True
             })
+            await memory.save()
             
             return success_response(
                 data={"mix_url": mix_url},
@@ -153,14 +157,15 @@ class MixService:
 
         # update project.json
         result_url = f"/media/{user_id}/{session_id}/mix/mix.wav"
-        orchestrator = ProjectOrchestrator(user_id, session_id)
-        await orchestrator.update_stage(
-            "mix",
-            {
-                "path": result_url,
-                "processed": True
-            }
-        )
+        MEDIA_DIR = Path("./media")
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+        if "mix" not in memory.project_data:
+            memory.project_data["mix"] = {}
+        memory.project_data["mix"].update({
+            "path": result_url,
+            "processed": True
+        })
+        await memory.save()
 
         return success_response(
             data={"mix_url": result_url},
@@ -180,9 +185,10 @@ class MixService:
             Dict with status and mix_url (if available)
         """
         try:
-            # Load project data from orchestrator
-            orchestrator = ProjectOrchestrator(user_id, session_id)
-            mix_stage = await orchestrator.get_stage("mix")
+            # Load project data from memory
+            MEDIA_DIR = Path("./media")
+            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+            mix_stage = memory.project_data.get("mix")
             
             # Check for mix URL in stage data
             mix_url = None

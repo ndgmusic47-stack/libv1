@@ -5,10 +5,12 @@ Clean backend using ONLY: Beatoven, OpenAI (text), Auphonic, GetLate, local serv
 
 from pathlib import Path
 import logging
+import traceback
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # Import routers
@@ -51,6 +53,20 @@ from backend.utils.responses import success_response, error_response
 # ============================================================================
 
 app = FastAPI(title="Label in a Box v4 - Phase 2.2")
+
+# Uncaught exception middleware - logs all unhandled exceptions and returns 500
+class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as e:
+            logger.error(f"Uncaught exception: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": "Internal Server Error"}
+            )
+
+app.add_middleware(UncaughtExceptionMiddleware)
 
 # Phase 1: Required API keys for startup validation
 REQUIRED_KEYS = [

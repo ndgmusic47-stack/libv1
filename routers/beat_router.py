@@ -5,8 +5,10 @@ import uuid
 from fastapi import APIRouter, Body, Depends
 from typing import Optional
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from database import get_db
 from services.beat_service import BeatService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
@@ -34,7 +36,8 @@ beat_service = BeatService()
 @beat_router.post("/create")
 async def create_beat(
     request: Optional[BeatRequest] = Body(default=None),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Phase 2.2: Generate beat using Beatoven API with fallback to demo beat - NEVER returns 422"""
     # Handle None request (empty body) or partial request
@@ -67,7 +70,8 @@ async def create_beat(
             mood=mood,
             genre=genre,
             bpm=bpm,
-            duration_sec=duration_sec if duration_provided else None
+            duration_sec=duration_sec if duration_provided else None,
+            db=db
         )
         
         return success_response(
