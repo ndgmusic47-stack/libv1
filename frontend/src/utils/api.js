@@ -2,12 +2,19 @@
 const API_BASE = '/api';
 
 // Phase 2.2: Helper to handle standardized JSON responses {ok, data, message} or {ok, error}
+// Phase 8.4: Preserve error data for paywall checks
 const handleResponse = async (response) => {
  const result = await response.json();
 
+ // Phase 8.4: Check for paywall errors even if response.ok is true (in case backend returns 403 but ok: false)
  if (!result.ok) {
-   // Surface backend error message or fallback to generic
-   throw new Error(result.error || result.message || 'API request failed');
+   // Phase 8.4: For upgrade_required errors, attach full error data to error object
+   const error = new Error(result.error || result.message || 'API request failed');
+   if (result.error === "upgrade_required") {
+     error.errorData = result;
+     error.isPaywall = true;
+   }
+   throw error;
  }
 
  // Return data directly for easier consumption
@@ -15,6 +22,33 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
+ // ========== AUTHENTICATION ==========
+
+ authMe: async (token) => {
+   const response = await fetch(`${API_BASE}/auth/me`, {
+     headers: { "Authorization": `Bearer ${token}` }
+   });
+   return handleResponse(response);
+ },
+
+ login: async (email, password) => {
+   const response = await fetch(`${API_BASE}/auth/login`, {
+     method: "POST",
+     headers: {"Content-Type": "application/json"},
+     body: JSON.stringify({ email, password })
+   });
+   return handleResponse(response);
+ },
+
+ signup: async (email, password) => {
+   const response = await fetch(`${API_BASE}/auth/signup`, {
+     method: "POST",
+     headers: {"Content-Type": "application/json"},
+     body: JSON.stringify({ email, password })
+   });
+   return handleResponse(response);
+ },
+
  // ========== V4 PROJECT MEMORY ==========
 
  listProjects: async () => {
@@ -114,18 +148,23 @@ export const api = {
 
  // ========== EXISTING ENDPOINTS ==========
 
- createBeat: async (mood, genre = 'hip hop', bpm = 120, duration_sec = 30, sessionId = null) => {
+ createBeat: async (promptText, mood, genre = 'hip hop', sessionId = null) => {
+   const body = {
+     prompt: promptText,
+     mood,
+     genre,
+     session_id: sessionId,
+   };
    const response = await fetch(`${API_BASE}/beats/create`, {
      method: 'POST',
      headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-       mood,
-       genre,
-       bpm,
-       duration_sec,
-       session_id: sessionId,
-     }),
+     body: JSON.stringify(body),
    });
+   return handleResponse(response);
+ },
+
+ getBeatCredits: async () => {
+   const response = await fetch(`${API_BASE}/beats/credits`);
    return handleResponse(response);
  },
 
@@ -143,69 +182,278 @@ export const api = {
    return handleResponse(response);
  },
 
- uploadRecording: async (file, sessionId = null) => {
-   const formData = new FormData();
-   formData.append('file', file);
-   if (sessionId) formData.append('session_id', sessionId);
-
-   const response = await fetch(`${API_BASE}/recordings/upload`, {
+ // V17: Generate lyrics from beat
+ // V18.2: Accepts either File object or FormData object
+ generateLyricsFromBeat: async (fileOrFormData, sessionId = null) => {
+   let body = fileOrFormData instanceof FormData 
+     ? fileOrFormData 
+     : (() => { const fd = new FormData(); fd.append("file", fileOrFormData); return fd; })();
+   
+   if (sessionId) {
+     body.append('session_id', sessionId);
+   }
+   
+   const response = await fetch(`${API_BASE}/lyrics/from_beat`, {
      method: 'POST',
-     body: formData,
+     body,
    });
    return handleResponse(response);
  },
 
-  mixAudio: async (sessionId, params) => {
-    const response = await fetch(`${API_BASE}/mix/run`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        vocal_gain: params.vocal_gain || params.vocalGain || 1.0,
-        beat_gain: params.beat_gain || params.beatGain || 0.8,
-        hpf_hz: params.hpf_hz || params.hpfHz || 80,
-        deess_amount: params.deess_amount || params.deessAmount || 0.3,
-      }),
-    });
-    return handleResponse(response);
-  },
-
-
-
-  generateCoverArt: async (title, artist, sessionId) => {
-    const response = await fetch(`${API_BASE}/release/generate-cover`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        title,
-        artist,
-      }),
-    });
-    return handleResponse(response);
-  },
-
-
- createReleasePack: async (sessionId) => {
-   const response = await fetch(`${API_BASE}/release/pack`, {
+ // V17: Generate free lyrics from theme
+ generateFreeLyrics: async (theme) => {
+   const response = await fetch(`${API_BASE}/lyrics/free`, {
      method: 'POST',
      headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({
-       session_id: sessionId,
+     body: JSON.stringify({ theme }),
+   });
+   return handleResponse(response);
+ },
+
+ // V18.1: Refine lyrics based on user instruction with history and metadata
+ refineLyrics: async (lyricsText, instruction, bpm = null, history = [], structuredLyrics = null, rhythmMap = null) => {
+   const response = await fetch(`${API_BASE}/lyrics/refine`, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ 
+       lyrics: lyricsText, 
+       instruction, 
+       bpm,
+       history,
+       structured_lyrics: structuredLyrics,
+       rhythm_map: rhythmMap
      }),
    });
    return handleResponse(response);
  },
 
-  generateContent: async (title, artist, sessionId = null) => {
-    const response = await fetch(`${API_BASE}/content/ideas`, {
+ uploadRecording: async (file, sessionId = null) => {
+   const formData = new FormData();
+   formData.append('file', file);
+   if (sessionId) formData.append('session_id', sessionId);
+
+  const response = await fetch(`${API_BASE}/upload-audio`, {
+    method: 'POST',
+    body: formData,
+  });
+   return handleResponse(response);
+ },
+
+
+
+
+  // NEW RELEASE MODULE ENDPOINTS
+  generateReleaseCover: async (sessionId, trackTitle, artistName, genre, mood, style = 'realistic') => {
+    const response = await fetch(`${API_BASE}/release/cover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        track_title: trackTitle,
+        artist_name: artistName,
+        genre,
+        mood,
+        style,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  selectReleaseCover: async (sessionId, coverUrl) => {
+    const response = await fetch(`${API_BASE}/release/select-cover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        cover_url: coverUrl,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  listReleaseFiles: async (sessionId) => {
+    const response = await fetch(`${API_BASE}/release/files?session_id=${sessionId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const result = await handleResponse(response);
+    return result.data || result;
+  },
+
+  getReleasePack: async (sessionId) => {
+    const response = await fetch(`${API_BASE}/release/pack?session_id=${sessionId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse(response);
+  },
+
+  generateReleaseCopy: async (sessionId, trackTitle, artistName, genre, mood, lyrics = '') => {
+    const response = await fetch(`${API_BASE}/release/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        track_title: trackTitle,
+        artist_name: artistName,
+        genre,
+        mood,
+        lyrics,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  generateLyricsPDF: async (sessionId, title, artist, lyrics) => {
+    const response = await fetch(`${API_BASE}/release/lyrics`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
         title,
         artist,
+        lyrics,
       }),
+    });
+    return handleResponse(response);
+  },
+
+  generateReleaseMetadata: async (sessionId, trackTitle, artistName, mood, genre, explicit, releaseDate) => {
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API_BASE}/release/metadata`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        session_id: sessionId,
+        track_title: trackTitle,
+        artist_name: artistName,
+        mood,
+        genre,
+        explicit,
+        release_date: releaseDate,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  downloadAllReleaseFiles: async (sessionId) => {
+    const response = await fetch(`${API_BASE}/release/download-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+
+
+  // V23.1: LEGACY - Old caption generator removed
+  // generateContent: async (title, artist, sessionId = null) => {
+  //   const response = await fetch(`${API_BASE}/content/ideas`, {
+  //     method: 'POST',
+  //     headers: { 'Content-Type': 'application/json' },
+  //     body: JSON.stringify({
+  //       session_id: sessionId,
+  //       title,
+  //       artist,
+  //     }),
+  //   });
+  //   return handleResponse(response);
+  // },
+
+  // V23: ContentStage MVP endpoints
+  generateVideoIdea: async (sessionId, title, lyrics, mood, genre) => {
+    const response = await fetch(`${API_BASE}/content/idea`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        title,
+        lyrics,
+        mood,
+        genre,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  uploadVideo: async (file, sessionId) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (sessionId) formData.append('session_id', sessionId);
+
+    const response = await fetch(`${API_BASE}/content/upload-video`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse(response);
+  },
+
+  analyzeVideo: async (transcript, title, lyrics, mood, genre) => {
+    const response = await fetch(`${API_BASE}/content/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript,
+        title,
+        lyrics,
+        mood,
+        genre,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  generateContentText: async (sessionId, title, transcript, lyrics, mood, genre) => {
+    const response = await fetch(`${API_BASE}/content/generate-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        title,
+        transcript,
+        lyrics,
+        mood,
+        genre,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  scheduleVideo: async (sessionId, videoUrl, caption, hashtags, platform, scheduleTime) => {
+    const response = await fetch(`${API_BASE}/content/schedule`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        video_url: videoUrl,
+        caption,
+        hashtags: hashtags || [],
+        platform: platform || 'tiktok',
+        schedule_time: scheduleTime,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  saveScheduled: async (data) => {
+    const response = await fetch(`${API_BASE}/content/save-scheduled`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  getScheduled: async (sessionId) => {
+    const response = await fetch(`${API_BASE}/content/get-scheduled?session_id=${sessionId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
     });
     return handleResponse(response);
   },
@@ -390,4 +638,146 @@ export const api = {
      throw err;
    }
  },
+
+ // ========== ADVANCE STAGE ==========
+ 
+ advanceStage: async (sessionId) => {
+   const response = await fetch(`${API_BASE}/projects/${sessionId}/advance`, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+   });
+   return handleResponse(response);
+ },
+
+ // ========== PROJECT SAVE/LOAD (PHASE 8.3) ==========
+
+ saveProject: async (userId, projectId, projectData) => {
+   const token = localStorage.getItem('auth_token');
+   const response = await fetch(`${API_BASE}/projects/save`, {
+     method: 'POST',
+     headers: { 
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${token}`
+     },
+     body: JSON.stringify({
+       userId,
+       projectId: projectId || null,
+       projectData
+     })
+   });
+   return handleResponse(response);
+ },
+
+ listProjects: async () => {
+   const token = localStorage.getItem('auth_token');
+   const response = await fetch(`${API_BASE}/projects/list`, {
+     headers: { 
+       'Authorization': `Bearer ${token}`
+     }
+   });
+   return handleResponse(response);
+ },
+
+ loadProject: async (projectId) => {
+   const token = localStorage.getItem('auth_token');
+   const response = await fetch(`${API_BASE}/projects/load`, {
+     method: 'POST',
+     headers: { 
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${token}`
+     },
+     body: JSON.stringify({ projectId })
+   });
+   return handleResponse(response);
+ },
+
+ // ========== BILLING (PHASE 9) ==========
+
+ createCheckoutSession: async (userId, priceId = null) => {
+   const token = localStorage.getItem('auth_token');
+   const response = await fetch(`${API_BASE}/billing/create-checkout-session`, {
+     method: 'POST',
+     headers: { 
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${token}`
+     },
+     body: JSON.stringify({ userId, priceId })
+   });
+   return handleResponse(response);
+ },
+
+ createPortalSession: async () => {
+   const token = localStorage.getItem('auth_token');
+   const response = await fetch(`${API_BASE}/billing/portal`, {
+     method: 'POST',
+     headers: { 
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${token}`
+     }
+   });
+   return handleResponse(response);
+  },
+};
+
+export const mixAudio = async (userId, sessionId) => {
+  try {
+    const res = await fetch(
+      `${API_BASE}/mix/${userId}/${sessionId}`,
+      { method: "POST" }
+    );
+    if (!res.ok) throw new Error("Mix failed");
+    return await res.json();
+  } catch (err) {
+    console.error("mixAudio error:", err);
+    throw err;
+  }
+};
+
+// Process single file with mastering effects
+export const processSingleMix = async (userId, file, toggles, sessionId = null) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('apply_eq', toggles.apply_eq || false);
+    formData.append('apply_compression', toggles.apply_compression || false);
+    formData.append('apply_limiter', toggles.apply_limiter || false);
+    formData.append('apply_saturation', toggles.apply_saturation || false);
+    if (sessionId) formData.append('session_id', sessionId);
+
+    const token = localStorage.getItem('auth_token');
+    const headers = {};
+    // Don't set Content-Type for FormData - browser sets it automatically with boundary
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/mix/process-single/${userId}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    
+    const result = await handleResponse(response);
+    return { mix_url: result.mix_url || result.data?.mix_url };
+  } catch (err) {
+    console.error("processSingleMix error:", err);
+    throw err;
+  }
+};
+
+// Run clean mix using vocal and beat files from session data
+export const runCleanMix = async (vocalUrl, beatUrl, sessionId) => {
+  const response = await fetch(`${API_BASE}/mix/run-clean`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${localStorage.getItem("auth_token")}`
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      vocal_url: vocalUrl,
+      beat_url: beatUrl
+    })
+  });
+  return handleResponse(response);
 };

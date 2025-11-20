@@ -3,204 +3,210 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 
-export default function ContentStage({ sessionId, sessionData, updateSessionData, voice, onClose }) {
+// Copy to clipboard helper
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text);
+};
+
+// Compute virality score based on transparent formula
+function computeViralityScore(caption, title, hook) {
+  let score = 50;
+
+  if (caption && caption.length > 60) score += 10;
+  if (caption && caption.includes("#")) score += 5;
+  if (hook && hook.length > 20) score += 10;
+  if (title && title.toLowerCase().includes("you")) score += 5;
+
+  return Math.min(score, 95);
+}
+
+export default function ContentStage({ sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const [activeTab, setActiveTab] = useState('social');
-  const [content, setContent] = useState(null);
-  const [loading, setLoading] = useState(false);
-  
-  const [videoFiles, setVideoFiles] = useState([]);
-  const [audioFile, setAudioFile] = useState(null);
-  const [beatData, setBeatData] = useState(null);
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [videoResult, setVideoResult] = useState(null);
-  
-  const [platforms, setPlatforms] = useState({});
-  const [scheduledPosts, setScheduledPosts] = useState([]);
-  const [selectedPlatform, setSelectedPlatform] = useState('instagram');
+  const [selectedPlatform, setSelectedPlatform] = useState('tiktok');
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
-  const handleGenerate = async () => {
-    setLoading(true);
-    
+  // V23: ContentStage MVP state
+  const [contentIdea, setContentIdea] = useState(sessionData.contentIdea || null);
+  const [uploadedVideo, setUploadedVideo] = useState(sessionData.uploadedVideo || null);
+  const [videoTranscript, setVideoTranscript] = useState(sessionData.videoTranscript || null);
+  const [viralAnalysis, setViralAnalysis] = useState(sessionData.viralAnalysis || null);
+  const [contentTextPack, setContentTextPack] = useState(sessionData.contentTextPack || null);
+  const [ideaLoading, setIdeaLoading] = useState(false);
+  const [videoUploadLoading, setVideoUploadLoading] = useState(false);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [textPackLoading, setTextPackLoading] = useState(false);
+
+  // V23: Step 1 - Generate Video Idea
+  const handleGenerateVideoIdea = async () => {
+    setIdeaLoading(true);
     try {
-      voice.speak('Generating social media content for your track...');
+      voice.speak('Generating video idea...');
       
-      // Phase 2.2: handleResponse extracts data automatically
-      const result = await api.generateContent(
-        sessionData.trackTitle || 'My Track',
-        sessionData.artist || 'Artist',
-        sessionId
-      );
-      
-      // Backend returns {captions: [{hook, text, hashtags}]}
-      setContent({
-        hooks: result.captions?.map(c => c.hook) || [],
-        captions: result.captions?.map(c => c.text) || [],
-        hashtags: result.captions?.[0]?.hashtags || []
-      });
-      voice.speak('Your content ideas are ready!');
-    } catch (err) {
-      voice.speak('Failed to generate content. Try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!content && activeTab === 'social') {
-      handleGenerate();
-      loadPlatforms();
-      loadScheduledPosts();
-    }
-  }, [activeTab]);
-
-  const loadPlatforms = async () => {
-    try {
-      // Phase 2.2: handleResponse extracts data automatically
-      const result = await api.getSocialPlatforms();
-      setPlatforms(result.platforms || {});
-    } catch (err) {
-      console.error('Failed to load platforms:', err);
-    }
-  };
-
-  const loadScheduledPosts = async () => {
-    try {
-      const result = await api.getScheduledPosts(sessionId);
-      if (result.status === 'ready') {
-        setScheduledPosts(result.posts);
-      }
-    } catch (err) {
-      console.error('Failed to load scheduled posts:', err);
-    }
-  };
-
-  const handleSchedulePost = async (content, scheduledTime, hashtags) => {
-    setScheduleLoading(true);
-    try {
-      voice.speak(`Scheduling post for ${selectedPlatform}...`);
-      
-      const result = await api.schedulePost(
+      const result = await api.generateVideoIdea(
         sessionId,
-        selectedPlatform,
-        content,
-        scheduledTime
+        sessionData.trackTitle || sessionData.title || 'My Track',
+        sessionData.lyricsData || sessionData.lyrics || '',
+        sessionData.mood || 'energetic',
+        sessionData.genre || 'hip hop'
       );
       
-      if (result.status === 'scheduled') {
-        voice.speak(result.message);
-        loadScheduledPosts();
+      setContentIdea(result);
+      updateSessionData({ contentIdea: result });
+      voice.speak('Video idea generated!');
+    } catch (err) {
+      voice.speak('Failed to generate video idea. Try again.');
+    } finally {
+      setIdeaLoading(false);
+    }
+  };
+
+  // V23: Step 2 - Upload Video
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.mp4') && !file.name.toLowerCase().endsWith('.mov')) {
+      voice.speak('Please upload an MP4 or MOV file');
+      return;
+    }
+
+    setVideoUploadLoading(true);
+    try {
+      voice.speak('Uploading video...');
+      
+      const result = await api.uploadVideo(file, sessionId);
+      
+      setUploadedVideo(result.file_url);
+      // Handle transcript with proper error handling
+      let transcriptText = result.transcript || '';
+      if (!transcriptText || transcriptText.includes('[Transcript') || transcriptText.includes('failed')) {
+        transcriptText = 'Transcript unavailable. Try again later.';
+      }
+      setVideoTranscript(transcriptText);
+      updateSessionData({
+        uploadedVideo: result.file_url,
+        videoTranscript: transcriptText
+      });
+      voice.speak('Video uploaded and processed!');
+    } catch (err) {
+      setVideoTranscript('Transcript unavailable. Try again later.');
+      voice.speak('Video upload failed. Try again.');
+    } finally {
+      setVideoUploadLoading(false);
+    }
+  };
+
+  // V23: Step 3 - Analyze Video
+  const handleAnalyzeVideo = async () => {
+    if (!videoTranscript) {
+      voice.speak('Please upload a video first');
+      return;
+    }
+
+    setAnalyzeLoading(true);
+    try {
+      voice.speak('Analyzing video for viral potential...');
+      
+      const result = await api.analyzeVideo(
+        videoTranscript,
+        sessionData.trackTitle || sessionData.title || 'My Track',
+        sessionData.lyricsData || sessionData.lyrics || '',
+        sessionData.mood || 'energetic',
+        sessionData.genre || 'hip hop'
+      );
+      
+      setViralAnalysis(result);
+      updateSessionData({ viralAnalysis: result });
+      voice.speak(`Analysis complete! Viral score: ${result.score}`);
+    } catch (err) {
+      voice.speak('Video analysis failed. Try again.');
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
+  // V23: Step 4 - Generate Captions & Hashtags
+  const handleGenerateTextPack = async () => {
+    setTextPackLoading(true);
+    try {
+      voice.speak('Generating captions and hashtags...');
+      
+      const result = await api.generateContentText(
+        sessionId,
+        sessionData.trackTitle || sessionData.title || 'My Track',
+        videoTranscript || '',
+        sessionData.lyricsData || sessionData.lyrics || '',
+        sessionData.mood || 'energetic',
+        sessionData.genre || 'hip hop'
+      );
+      
+      setContentTextPack(result);
+      updateSessionData({ contentTextPack: result });
+      // Mark content stage as complete when content is generated
+      if (completeStage) {
+        completeStage('content');
+      }
+      voice.speak('Captions and hashtags generated!');
+    } catch (err) {
+      voice.speak('Failed to generate content text. Try again.');
+    } finally {
+      setTextPackLoading(false);
+    }
+  };
+
+  // V23: Step 5 - Schedule Video (using GETLATE API via /content/schedule)
+  const handleScheduleVideo = async (selectedCaption, selectedHashtags, scheduleTime, platform) => {
+    if (!uploadedVideo || !selectedCaption || !scheduleTime) {
+      voice.speak('Please complete all steps first');
+      return;
+    }
+
+    setScheduleLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      voice.speak('Scheduling video...');
+      
+      const result = await api.scheduleVideo(
+        sessionId,
+        uploadedVideo,
+        selectedCaption,
+        selectedHashtags,
+        platform || selectedPlatform,
+        scheduleTime
+      );
+      
+      if (result.status === 'scheduled' || result.status === 'saved') {
+        // Save scheduled post to session memory
+        await api.saveScheduled({
+          sessionId,
+          platform: platform || selectedPlatform,
+          dateTime: scheduleTime,
+          caption: selectedCaption,
+        });
+        
+        updateSessionData({ contentScheduled: true });
+        voice.speak('Your video has been scheduled.');
+        setSuccess('Your post is scheduled!');
+        
+        // Auto-clear success message after 3 seconds
+        setTimeout(() => setSuccess(''), 3000);
+        
+        // Mark schedule stage as complete (only triggers once per session)
+        // Check if schedule stage is already complete to avoid retriggering
+        if (completeStage && !sessionData.scheduleComplete) {
+          completeStage('schedule');
+          updateSessionData({ scheduleComplete: true });
+        }
       }
     } catch (err) {
-      voice.speak('Scheduling failed. Try again.');
+      const errorMsg = err.message || 'Scheduling failed. Try again.';
+      setError(errorMsg);
+      voice.speak(errorMsg);
+      // Auto-clear error after 3 seconds
+      setTimeout(() => setError(''), 3000);
     } finally {
       setScheduleLoading(false);
-    }
-  };
-
-  const handleCancelPost = async (postId) => {
-    try {
-      voice.speak('Cancelling post...');
-      const result = await api.cancelPost(sessionId, postId);
-      if (result.status === 'cancelled') {
-        voice.speak('Post cancelled');
-        loadScheduledPosts();
-      }
-    } catch (err) {
-      voice.speak('Cancel failed');
-    }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    voice.speak('Copied to clipboard');
-  };
-
-  const handleVideoFileChange = (e) => {
-    const files = Array.from(e.target.files);
-    setVideoFiles(files);
-    voice.speak(`${files.length} video clip${files.length > 1 ? 's' : ''} selected`);
-  };
-
-  const handleAudioFileChange = (e) => {
-    const file = e.target.files[0];
-    setAudioFile(file);
-    voice.speak('Audio track selected');
-  };
-
-  const handleAnalyzeBeats = async () => {
-    if (!audioFile) {
-      voice.speak('Please upload an audio track first');
-      return;
-    }
-
-    setVideoLoading(true);
-    try {
-      voice.speak('Analyzing beats in your track...');
-      
-      const formData = new FormData();
-      formData.append('session_id', sessionData.sessionId);
-      formData.append('audio_file', audioFile);
-      
-      videoFiles.forEach(file => {
-        formData.append('video_files', file);
-      });
-
-      const result = await api.analyzeVideoBeats(formData);
-      
-      if (result.status === 'analyzed') {
-        setBeatData(result);
-        voice.speak(`Found ${result.beat_count} beats at ${result.beat_data.tempo.toFixed(0)} BPM. ${result.suggestions.tips[0]}`);
-      }
-    } catch (err) {
-      voice.speak('Beat analysis failed. Try again.');
-    } finally {
-      setVideoLoading(false);
-    }
-  };
-
-  const handleCreateBeatSync = async () => {
-    if (!beatData) {
-      voice.speak('Analyze beats first');
-      return;
-    }
-
-    setVideoLoading(true);
-    try {
-      voice.speak('Creating beat-synced video...');
-      
-      const result = await api.createBeatSyncVideo(sessionData.sessionId, 'energetic');
-      
-      if (result.status === 'created') {
-        setVideoResult(result);
-        voice.speak(`Beat-synced video created with ${result.clip_count} clips!`);
-      }
-    } catch (err) {
-      voice.speak('Video creation failed. Try again.');
-    } finally {
-      setVideoLoading(false);
-    }
-  };
-
-  const handleExportVideo = async (quality = 'high') => {
-    if (!videoResult) {
-      voice.speak('Create a video first');
-      return;
-    }
-
-    setVideoLoading(true);
-    try {
-      voice.speak(`Exporting video in ${quality} quality...`);
-      
-      const result = await api.exportVideo(sessionData.sessionId, 'mp4', quality);
-      
-      if (result.status === 'exported') {
-        voice.speak(`Video exported! ${result.file_size_mb} megabytes.`);
-      }
-    } catch (err) {
-      voice.speak('Export failed. Try again.');
-    } finally {
-      setVideoLoading(false);
     }
   };
 
@@ -209,6 +215,7 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
       title="Content & Video" 
       icon="🎬" 
       onClose={onClose}
+      onNext={onNext}
       voice={voice}
     >
       <div className="flex flex-col h-full">
@@ -228,18 +235,28 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
           <AnimatePresence mode="wait">
             {activeTab === 'social' && (
               <SocialContentTab
-                loading={loading}
-                content={content}
-                onGenerate={handleGenerate}
-                onCopy={copyToClipboard}
                 voice={voice}
-                platforms={platforms}
                 selectedPlatform={selectedPlatform}
                 onPlatformChange={setSelectedPlatform}
-                onSchedulePost={handleSchedulePost}
-                scheduledPosts={scheduledPosts}
-                onCancelPost={handleCancelPost}
                 scheduleLoading={scheduleLoading}
+                // V23: ContentStage MVP props
+                contentIdea={contentIdea}
+                uploadedVideo={uploadedVideo}
+                videoTranscript={videoTranscript}
+                viralAnalysis={viralAnalysis}
+                contentTextPack={contentTextPack}
+                onGenerateVideoIdea={handleGenerateVideoIdea}
+                onVideoUpload={handleVideoUpload}
+                onAnalyzeVideo={handleAnalyzeVideo}
+                onGenerateTextPack={handleGenerateTextPack}
+                onScheduleVideo={handleScheduleVideo}
+                ideaLoading={ideaLoading}
+                videoUploadLoading={videoUploadLoading}
+                analyzeLoading={analyzeLoading}
+                textPackLoading={textPackLoading}
+                sessionId={sessionId}
+                sessionData={sessionData}
+                completeStage={completeStage}
               />
             )}
           </AnimatePresence>
@@ -270,33 +287,54 @@ function TabButton({ active, onClick, icon, label }) {
 }
 
 function SocialContentTab({ 
-  loading, 
-  content, 
-  onGenerate, 
-  onCopy, 
   voice,
-  platforms,
   selectedPlatform,
   onPlatformChange,
-  onSchedulePost,
-  scheduledPosts,
-  onCancelPost,
-  scheduleLoading
+  scheduleLoading,
+  // V23: ContentStage MVP props
+  contentIdea,
+  uploadedVideo,
+  videoTranscript,
+  viralAnalysis,
+  contentTextPack,
+  onGenerateVideoIdea,
+  onVideoUpload,
+  onAnalyzeVideo,
+  onGenerateTextPack,
+  onScheduleVideo,
+  ideaLoading,
+  videoUploadLoading,
+  analyzeLoading,
+  textPackLoading,
+  sessionId,
+  sessionData,
+  completeStage
 }) {
-  const [selectedContent, setSelectedContent] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('12:00');
+  const [selectedCaption, setSelectedCaption] = useState('');
+  const [selectedHashtags, setSelectedHashtags] = useState([]);
+  const [scheduledPosts, setScheduledPosts] = useState([]);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleSchedule = () => {
-    if (!selectedContent || !scheduleDate) {
-      voice.speak('Please select content and a date first');
-      return;
+  // Load scheduled posts on mount and after scheduling
+  useEffect(() => {
+    const loadScheduled = async () => {
+      try {
+        const result = await api.getScheduled(sessionId);
+        // Handle both array response and data wrapper
+        const posts = Array.isArray(result) ? result : (result?.data || []);
+        setScheduledPosts(posts || []);
+      } catch (err) {
+        // Silently fail - no scheduled posts yet
+        setScheduledPosts([]);
+      }
+    };
+    if (sessionId) {
+      loadScheduled();
     }
-
-    const scheduledTime = `${scheduleDate}T${scheduleTime}:00Z`;
-    const hashtags = content?.hashtags || [];
-    onSchedulePost(selectedContent, scheduledTime, hashtags);
-  };
+  }, [sessionId]);
 
   return (
     <motion.div
@@ -307,439 +345,488 @@ function SocialContentTab({
       transition={{ duration: 0.25, ease: "easeOut" }}
       className="flex flex-col gap-6 p-6 md:p-10"
     >
-      <div className="text-6xl mb-4 text-center">
+      <div className="icon-wrapper text-6xl mb-4 text-center">
         📱
       </div>
 
       <div className="w-full max-w-4xl mx-auto space-y-8">
-        {loading ? (
-          <p className="text-studio-white/60 font-poppins text-center">Generating content...</p>
-        ) : content ? (
-          <>
-            {/* Content Generation */}
-            <div className="space-y-6">
-              <Section title="Hooks" items={content.hooks} onCopy={onCopy} onSelect={setSelectedContent} />
-              <Section title="Captions" items={content.captions} onCopy={onCopy} onSelect={setSelectedContent} />
-              
-              <div>
-                <h3 className="text-studio-red font-montserrat font-semibold text-lg mb-3">
-                  Hashtags
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {content.hashtags?.map((tag, i) => (
-                    <motion.button
-                      key={i}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, ease: "easeOut", delay: i * 0.05 }}
-                      onClick={() => onCopy(tag)}
-                      className="px-3 py-1 bg-studio-gray/50 hover:bg-studio-gray
-                               text-sm text-studio-white/80 rounded-full
-                               border border-studio-white/10 hover:border-studio-red/50
-                               transition-all duration-200"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {tag}
-                    </motion.button>
-                  ))}
+        {/* Viral Helper Message */}
+        <p className="text-sm text-studio-white/70 font-poppins mb-2">
+          🔥 This module helps you create viral content — follow the steps below.
+        </p>
+
+        {/* V23: Step 1 - Generate Video Idea */}
+        <div className="space-y-4 border-b border-studio-white/10 pb-6">
+          <h3 className="text-lg text-studio-gold font-montserrat font-semibold">
+            Step 1: Generate Video Idea
+          </h3>
+          <motion.button
+            onClick={onGenerateVideoIdea}
+            disabled={ideaLoading}
+            className="w-full py-3 bg-studio-gray hover:bg-studio-red text-studio-white font-montserrat rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={ideaLoading ? {} : { scale: 1.02 }}
+            whileTap={ideaLoading ? {} : { scale: 0.98 }}
+          >
+            {ideaLoading ? 'Generating...' : 'Generate Video Idea'}
+          </motion.button>
+          {contentIdea && (
+            <div className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Idea:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">{contentIdea.idea}</p>
                 </div>
-              </div>
-
-              <motion.button
-                onClick={onGenerate}
-                className="w-full py-3 bg-studio-gray hover:bg-studio-gray/80
-                         text-studio-white font-montserrat rounded-lg"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                Generate New Content
-              </motion.button>
-            </div>
-
-            {/* Scheduling Section */}
-            <div className="border-t border-studio-white/10 pt-8 space-y-4">
-              <h3 className="text-studio-red font-montserrat font-semibold text-xl mb-4">
-                📅 Schedule Post
-              </h3>
-
-              {/* Platform Selector */}
-              <div>
-                <label className="text-studio-white/80 font-montserrat text-sm mb-2 block">
-                  Platform
-                </label>
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                  {Object.keys(platforms).map(platform => (
-                    <motion.button
-                      key={platform}
-                      onClick={() => onPlatformChange(platform)}
-                      className={`
-                        py-2 px-3 rounded-lg font-montserrat capitalize text-sm
-                        ${selectedPlatform === platform
-                          ? 'bg-studio-red text-studio-white'
-                          : 'bg-studio-gray/30 text-studio-white/60 hover:bg-studio-gray/50'
-                        }
-                      `}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {platform}
-                    </motion.button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Date & Time */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-studio-white/80 font-montserrat text-sm mb-2 block">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    className="w-full p-3 bg-studio-gray/30 border border-studio-white/10
-                             text-studio-white rounded-lg focus:border-studio-red/50
-                             focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-studio-white/80 font-montserrat text-sm mb-2 block">
-                    Time
-                  </label>
-                  <input
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full p-3 bg-studio-gray/30 border border-studio-white/10
-                             text-studio-white rounded-lg focus:border-studio-red/50
-                             focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Schedule Button - Disabled with tooltip */}
-              <div className="relative group">
                 <motion.button
-                  disabled={true}
-                  className="w-full py-3 rounded-lg font-montserrat
-                           bg-studio-gray/30 text-studio-white/30 cursor-not-allowed"
-                  title="Scheduling requires TikTok / Instagram API integration."
+                  onClick={() => copyToClipboard(contentIdea.idea)}
+                  className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  Schedule Post
+                  Copy
                 </motion.button>
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-studio-gray text-studio-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                  Scheduling requires TikTok / Instagram API integration.
-                </div>
               </div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Hook:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">{contentIdea.hook}</p>
+                </div>
+                <motion.button
+                  onClick={() => copyToClipboard(contentIdea.hook)}
+                  className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Copy
+                </motion.button>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Script:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">{contentIdea.script}</p>
+                </div>
+                <motion.button
+                  onClick={() => copyToClipboard(contentIdea.script)}
+                  className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Copy
+                </motion.button>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Visual:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">{contentIdea.visual}</p>
+                </div>
+                <motion.button
+                  onClick={() => copyToClipboard(contentIdea.visual)}
+                  className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Copy
+                </motion.button>
+              </div>
+            </div>
+          )}
+        </div>
 
-              {selectedContent && (
-                <div className="p-4 bg-studio-gray/20 rounded-lg border border-studio-white/10">
-                  <p className="text-studio-white/60 text-sm mb-1">Selected Content:</p>
-                  <p className="text-studio-white/90 text-sm">{selectedContent.substring(0, 100)}...</p>
+        {/* V23: Step 2 - Upload Video */}
+        <div className="space-y-4 border-b border-studio-white/10 pb-6">
+          <h3 className="text-lg text-studio-gold font-montserrat font-semibold">
+            Step 2: Upload Finished Video
+          </h3>
+          <label className="block w-full p-6 bg-studio-gray/30 border-2 border-dashed border-studio-white/20 hover:border-studio-red/50 rounded-lg cursor-pointer transition-all">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🎥</div>
+              <p className="text-sm text-studio-white/90 font-montserrat font-semibold mb-1">
+                {uploadedVideo ? 'Video Uploaded' : 'Click to upload MP4 or MOV'}
+              </p>
+              <p className="text-xs text-studio-white/60 font-poppins">
+                {videoUploadLoading ? 'Uploading...' : (uploadedVideo ? 'Change video' : 'Select video file')}
+              </p>
+            </div>
+            <input
+              type="file"
+              accept=".mp4,.mov"
+              onChange={onVideoUpload}
+              disabled={videoUploadLoading}
+              className="hidden"
+            />
+          </label>
+          {uploadedVideo && (
+            <div className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10">
+              <p className="text-xs text-studio-white/60 font-poppins mb-1">Video URL:</p>
+              <p className="text-sm text-studio-white/90 font-poppins text-sm break-all">{uploadedVideo}</p>
+              {videoTranscript && (
+                <div className="mt-3">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Transcript:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">
+                    {videoTranscript.length > 200 && !videoTranscript.includes('unavailable')
+                      ? `${videoTranscript.substring(0, 200)}...`
+                      : videoTranscript}
+                  </p>
                 </div>
               )}
             </div>
+          )}
+        </div>
 
-            {/* Scheduled Posts */}
-            {scheduledPosts.length > 0 && (
-              <div className="border-t border-studio-white/10 pt-8">
-                <h3 className="text-studio-red font-montserrat font-semibold text-xl mb-4">
-                  📌 Scheduled Posts ({scheduledPosts.length})
-                </h3>
-                <div className="space-y-3">
-                  {scheduledPosts.map((post, i) => (
-                    <motion.div
-                      key={post.post_id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10
-                               flex justify-between items-start"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-2 py-1 bg-studio-red/20 text-studio-red
-                                         text-xs rounded-full capitalize">
-                            {post.platform}
-                          </span>
-                          <span className="text-studio-white/60 text-xs">
-                            {new Date(post.scheduled_time).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="text-studio-white/80 text-sm">
-                          {post.content.substring(0, 80)}...
-                        </p>
+        {/* V23: Step 3 - Analyze Video */}
+        <div className="space-y-4 border-b border-studio-white/10 pb-6">
+          <h3 className="text-lg text-studio-gold font-montserrat font-semibold">
+            Step 3: Analyze Video
+          </h3>
+          <motion.button
+            onClick={onAnalyzeVideo}
+            disabled={!videoTranscript || analyzeLoading}
+            className="w-full py-3 bg-studio-gray hover:bg-studio-red text-studio-white font-montserrat rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={(!videoTranscript || analyzeLoading) ? {} : { scale: 1.02 }}
+            whileTap={(!videoTranscript || analyzeLoading) ? {} : { scale: 0.98 }}
+          >
+            {analyzeLoading ? 'Analyzing...' : 'Analyze Video'}
+          </motion.button>
+          {viralAnalysis && (
+            <div className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10 space-y-3">
+              <div className="flex items-center gap-4">
+                <div>
+                  <p className="text-studio-white/60 text-sm mb-1">Viral Score:</p>
+                  <p className="text-lg text-studio-gold font-montserrat font-bold">
+                    {computeViralityScore(
+                      selectedCaption || contentTextPack?.captions?.[0] || '',
+                      sessionData.trackTitle || sessionData.title || '',
+                      contentIdea?.hook || viralAnalysis.suggested_hook || ''
+                    )}/100
+                  </p>
+                  <p className="text-xs text-studio-white/60 font-poppins mt-1">
+                    (Experimental — based on text structure)
+                  </p>
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-studio-white/60 font-poppins mb-1">Summary:</p>
+                  <p className="text-sm text-studio-white/90 font-poppins">{viralAnalysis.summary}</p>
+                </div>
+              </div>
+              {viralAnalysis.improvements && viralAnalysis.improvements.length > 0 && (
+                <div>
+                  <p className="text-xs text-studio-white/60 font-poppins mb-2">Improvements:</p>
+                  <ul className="space-y-1">
+                    {viralAnalysis.improvements.map((imp, i) => (
+                      <li key={i} className="text-sm text-studio-white/90 font-poppins">• {imp}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {viralAnalysis.suggested_hook && (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-xs text-studio-white/60 font-poppins mb-1">Suggested Hook:</p>
+                    <p className="text-sm text-studio-white/90 font-poppins">{viralAnalysis.suggested_hook}</p>
+                  </div>
+                  <motion.button
+                    onClick={() => copyToClipboard(viralAnalysis.suggested_hook)}
+                    className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Copy
+                  </motion.button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* V23: Step 4 - Generate Captions & Hashtags */}
+        <div className="space-y-4 border-b border-studio-white/10 pb-6">
+          <h3 className="text-lg text-studio-gold font-montserrat font-semibold">
+            Step 4: Generate Captions & Hashtags
+          </h3>
+          <motion.button
+            onClick={onGenerateTextPack}
+            disabled={textPackLoading}
+            className="w-full py-3 bg-studio-gray hover:bg-studio-red text-studio-white font-montserrat rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={textPackLoading ? {} : { scale: 1.02 }}
+            whileTap={textPackLoading ? {} : { scale: 0.98 }}
+          >
+            {textPackLoading ? 'Generating...' : 'Generate Captions & Hashtags'}
+          </motion.button>
+          {contentTextPack && (
+            <div className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10 space-y-4">
+              {contentTextPack.captions && contentTextPack.captions.length > 0 && (
+                <div>
+                  <p className="text-xs text-studio-white/60 font-poppins mb-2">Captions:</p>
+                  <div className="space-y-2">
+                    {contentTextPack.captions.map((caption, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <motion.button
+                          onClick={() => setSelectedCaption(caption)}
+                          className={`flex-1 p-3 text-left rounded-lg border transition-all ${
+                            selectedCaption === caption
+                              ? 'bg-studio-red/20 border-studio-red text-studio-white'
+                              : 'bg-studio-gray/50 border-studio-white/10 text-studio-white/90 hover:border-studio-red/50'
+                          }`}
+                          whileHover={{ scale: 1.01 }}
+                          whileTap={{ scale: 0.99 }}
+                        >
+                          {caption}
+                        </motion.button>
+                        <motion.button
+                          onClick={() => copyToClipboard(caption)}
+                          className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all self-center"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          Copy
+                        </motion.button>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {contentTextPack.hashtags && contentTextPack.hashtags.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-studio-white/60 font-poppins">Hashtags:</p>
+                    <motion.button
+                      onClick={() => copyToClipboard(contentTextPack.hashtags.join(' '))}
+                      className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      Copy All
+                    </motion.button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {contentTextPack.hashtags.map((tag, i) => (
                       <motion.button
-                        onClick={() => onCancelPost(post.post_id)}
-                        className="ml-4 px-3 py-1 bg-studio-gray/50 hover:bg-studio-red/20
-                                 text-studio-white/60 hover:text-studio-red text-sm rounded"
+                        key={i}
+                        onClick={() => {
+                          if (selectedHashtags.includes(tag)) {
+                            setSelectedHashtags(selectedHashtags.filter(t => t !== tag));
+                          } else {
+                            setSelectedHashtags([...selectedHashtags, tag]);
+                          }
+                        }}
+                        className={`px-3 py-1 text-sm rounded-full border transition-all ${
+                          selectedHashtags.includes(tag)
+                            ? 'bg-studio-red/20 border-studio-red text-studio-white'
+                            : 'bg-studio-gray/50 border-studio-white/10 text-studio-white/80 hover:border-studio-red/50'
+                        }`}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        Cancel
+                        {tag}
                       </motion.button>
-                    </motion.div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </>
-        ) : null}
-      </div>
-    </motion.div>
-  );
-}
-
-function VideoEditorTab({
-  videoFiles,
-  audioFile,
-  beatData,
-  videoResult,
-  loading,
-  onVideoFileChange,
-  onAudioFileChange,
-  onAnalyzeBeats,
-  onCreateBeatSync,
-  onExportVideo,
-  voice
-}) {
-  return (
-    <motion.div
-      key="video"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className="flex flex-col gap-6 p-6 md:p-10"
-    >
-      <div className="text-6xl mb-4 text-center">
-        🎬
-      </div>
-
-      <div className="w-full max-w-4xl mx-auto space-y-6">
-        {/* Upload Section */}
-        <div className="space-y-4">
-          <h3 className="text-studio-red font-montserrat font-semibold text-lg">
-            1. Upload Files
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FileUploadBox
-              label="Video Clips"
-              accept="video/*"
-              multiple
-              onChange={onVideoFileChange}
-              fileCount={videoFiles.length}
-              icon="🎥"
-            />
-            
-            <FileUploadBox
-              label="Audio Track"
-              accept="audio/*"
-              onChange={onAudioFileChange}
-              fileCount={audioFile ? 1 : 0}
-              icon="🎵"
-            />
-          </div>
-        </div>
-
-        {/* Beat Analysis Section */}
-        <div className="space-y-4">
-          <h3 className="text-studio-red font-montserrat font-semibold text-lg">
-            2. Analyze Beats
-          </h3>
-          
-          <motion.button
-            onClick={onAnalyzeBeats}
-            disabled={!audioFile || loading}
-            className={`
-              w-full py-3 rounded-lg font-montserrat transition-all
-              ${!audioFile || loading
-                ? 'bg-studio-gray/30 text-studio-white/30 cursor-not-allowed'
-                : 'bg-studio-gray hover:bg-studio-red text-studio-white'
-              }
-            `}
-            whileHover={!audioFile || loading ? {} : { scale: 1.02 }}
-            whileTap={!audioFile || loading ? {} : { scale: 0.98 }}
-          >
-            {loading ? 'Analyzing...' : 'Detect Beats'}
-          </motion.button>
-
-          {beatData && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10"
-            >
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              )}
+              {contentTextPack.hooks && contentTextPack.hooks.length > 0 && (
                 <div>
-                  <p className="text-studio-white/60 text-sm">Tempo</p>
-                  <p className="text-studio-white font-montserrat text-xl">
-                    {beatData.beat_data.tempo.toFixed(0)} BPM
-                  </p>
+                  <p className="text-xs text-studio-white/60 font-poppins mb-2">Hooks:</p>
+                  <div className="space-y-2">
+                    {contentTextPack.hooks.map((hook, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <div className="flex-1 p-3 bg-studio-gray/50 rounded-lg border border-studio-white/10">
+                          <p className="text-sm text-studio-white/90 font-poppins">{hook}</p>
+                        </div>
+                        <motion.button
+                          onClick={() => copyToClipboard(hook)}
+                          className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all self-center"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          Copy
+                        </motion.button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-studio-white/60 text-sm">Beats Found</p>
-                  <p className="text-studio-white font-montserrat text-xl">
-                    {beatData.beat_count}
-                  </p>
+              )}
+              {contentTextPack.posting_strategy && (
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-xs text-studio-white/60 font-poppins mb-1">Posting Strategy:</p>
+                    <p className="text-sm text-studio-white/90 font-poppins">{contentTextPack.posting_strategy}</p>
+                  </div>
+                  <motion.button
+                    onClick={() => copyToClipboard(contentTextPack.posting_strategy)}
+                    className="px-2 py-1 text-xs bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white rounded transition-all"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Copy
+                  </motion.button>
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <p className="text-studio-white/80 text-sm font-montserrat font-semibold">
-                  AI Suggestions:
-                </p>
-                {beatData.suggestions.tips.slice(0, 3).map((tip, i) => (
-                  <p key={i} className="text-studio-white/60 text-sm">
-                    • {tip}
-                  </p>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Create Beat-Sync Video */}
-        <div className="space-y-4">
-          <h3 className="text-studio-red font-montserrat font-semibold text-lg">
-            3. Create Beat-Synced Video
-          </h3>
-          
-          <motion.button
-            onClick={onCreateBeatSync}
-            disabled={!beatData || loading}
-            className={`
-              w-full py-3 rounded-lg font-montserrat transition-all
-              ${!beatData || loading
-                ? 'bg-studio-gray/30 text-studio-white/30 cursor-not-allowed'
-                : 'bg-studio-gray hover:bg-studio-red text-studio-white'
-              }
-            `}
-            whileHover={!beatData || loading ? {} : { scale: 1.02 }}
-            whileTap={!beatData || loading ? {} : { scale: 0.98 }}
-          >
-            {loading ? 'Creating...' : 'Auto-Edit to Beats'}
-          </motion.button>
-
-          {videoResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-studio-gray/30 rounded-lg border border-studio-green/30"
-            >
-              <p className="text-studio-green text-sm mb-2">✓ Video Created</p>
-              <p className="text-studio-white/80">
-                {videoResult.message}
-              </p>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Export Section */}
-        <div className="space-y-4">
-          <h3 className="text-studio-red font-montserrat font-semibold text-lg">
-            4. Export
-          </h3>
-          
-          <div className="grid grid-cols-3 gap-3">
-            {['high', 'medium', 'low'].map(quality => (
-              <motion.button
-                key={quality}
-                onClick={() => onExportVideo(quality)}
-                disabled={!videoResult || loading}
-                className={`
-                  py-3 rounded-lg font-montserrat transition-all capitalize
-                  ${!videoResult || loading
-                    ? 'bg-studio-gray/30 text-studio-white/30 cursor-not-allowed'
-                    : 'bg-studio-gray hover:bg-studio-red text-studio-white'
-                  }
-                `}
-                whileHover={!videoResult || loading ? {} : { scale: 1.02 }}
-                whileTap={!videoResult || loading ? {} : { scale: 0.98 }}
-              >
-                {quality}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function FileUploadBox({ label, accept, multiple, onChange, fileCount, icon }) {
-  return (
-    <div className="relative">
-      <label className="block w-full p-6 bg-studio-gray/30 border-2 border-dashed 
-                       border-studio-white/20 hover:border-studio-red/50 
-                       rounded-lg cursor-pointer transition-all group">
-        <div className="text-center">
-          <div className="text-4xl mb-2">{icon}</div>
-          <p className="text-studio-white/80 font-montserrat font-semibold mb-1">
-            {label}
-          </p>
-          <p className="text-studio-white/50 text-sm">
-            {fileCount > 0 
-              ? `${fileCount} file${fileCount > 1 ? 's' : ''} selected`
-              : 'Click to upload'
-            }
-          </p>
-        </div>
-        <input
-          type="file"
-          accept={accept}
-          multiple={multiple}
-          onChange={onChange}
-          className="hidden"
-        />
-      </label>
-    </div>
-  );
-}
-
-function Section({ title, items, onCopy, onSelect }) {
-  return (
-    <div>
-      <h3 className="text-studio-red font-montserrat font-semibold text-lg mb-3">
-        {title}
-      </h3>
-      <div className="space-y-2">
-        {items?.map((item, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="p-4 bg-studio-gray/50 hover:bg-studio-gray
-                     rounded-lg border border-studio-white/10
-                     hover:border-studio-red/50 transition-all group"
-          >
-            <p className="text-studio-white/90 font-poppins mb-2">{item}</p>
-            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
-                onClick={() => onCopy(item)}
-                className="px-3 py-1 bg-studio-gray hover:bg-studio-red/20
-                         text-studio-white/80 text-xs rounded"
-              >
-                Copy
-              </button>
-              {onSelect && (
-                <button
-                  onClick={() => onSelect(item)}
-                  className="px-3 py-1 bg-studio-red hover:bg-studio-red/80
-                           text-studio-white text-xs rounded"
-                >
-                  Select for Schedule
-                </button>
               )}
             </div>
-          </motion.div>
-        ))}
+          )}
+        </div>
+
+        {/* V23: Step 5 - Schedule Video */}
+        <div className="space-y-4 border-t border-studio-white/10 pt-8">
+          <h3 className="text-lg text-studio-gold font-montserrat font-semibold">
+            Step 5: Schedule Video
+          </h3>
+
+          {/* Platform Selector */}
+          <div>
+            <label className="text-xs text-studio-white/60 font-montserrat mb-2 block">
+              Platform
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {['tiktok', 'shorts', 'reels'].map(platform => (
+                <motion.button
+                  key={platform}
+                  onClick={() => onPlatformChange(platform)}
+                  className={`
+                    py-2 px-3 rounded-lg font-montserrat capitalize text-sm
+                    ${selectedPlatform === platform
+                      ? 'bg-studio-red text-studio-white'
+                      : 'bg-studio-gray/30 text-studio-white/60 hover:bg-studio-gray/50'
+                    }
+                  `}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {platform}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-studio-white/60 font-montserrat mb-2 block">
+                Date
+              </label>
+              <input
+                type="date"
+                value={scheduleDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
+                className="w-full p-3 bg-studio-gray/30 border border-studio-white/10
+                         text-studio-white rounded-lg focus:border-studio-red/50
+                         focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-studio-white/60 font-montserrat mb-2 block">
+                Time
+              </label>
+              <input
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                className="w-full p-3 bg-studio-gray/30 border border-studio-white/10
+                         text-studio-white rounded-lg focus:border-studio-red/50
+                         focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Error/Success Messages */}
+          {error && (
+            <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-300 text-sm">
+              {success}
+            </div>
+          )}
+
+          {/* Schedule Button */}
+          <motion.button
+            onClick={async () => {
+              // Validate inputs
+              if (!selectedPlatform) {
+                setError('Please select a platform before scheduling.');
+                voice.speak('Please select a platform');
+                setTimeout(() => setError(''), 3000);
+                return;
+              }
+              if (!scheduleDate) {
+                setError('Please select a date before scheduling.');
+                voice.speak('Please select a date');
+                setTimeout(() => setError(''), 3000);
+                return;
+              }
+              if (!scheduleTime) {
+                setError('Please select a time before scheduling.');
+                voice.speak('Please select a time');
+                setTimeout(() => setError(''), 3000);
+                return;
+              }
+              if (!selectedCaption) {
+                setError('Please select a caption before scheduling.');
+                voice.speak('Please select a caption');
+                setTimeout(() => setError(''), 3000);
+                return;
+              }
+              
+              const scheduledTime = `${scheduleDate}T${scheduleTime}:00Z`;
+              await onScheduleVideo(selectedCaption, selectedHashtags, scheduledTime, selectedPlatform);
+              
+              // Reload scheduled posts after scheduling
+              try {
+                const result = await api.getScheduled(sessionId);
+                const posts = Array.isArray(result) ? result : (result?.data || []);
+                setScheduledPosts(posts || []);
+              } catch (err) {
+                // Silently fail
+              }
+            }}
+            disabled={!uploadedVideo || !selectedCaption || !scheduleDate || !scheduleTime || !selectedPlatform || scheduleLoading}
+            className="w-full py-3 rounded-lg font-montserrat
+                     bg-studio-gray hover:bg-studio-red text-studio-white
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={(!uploadedVideo || !selectedCaption || !scheduleDate || !scheduleTime || !selectedPlatform || scheduleLoading) ? {} : { scale: 1.02 }}
+            whileTap={(!uploadedVideo || !selectedCaption || !scheduleDate || !scheduleTime || !selectedPlatform || scheduleLoading) ? {} : { scale: 0.98 }}
+          >
+            {scheduleLoading ? 'Scheduling...' : 'Schedule Video'}
+          </motion.button>
+
+          {/* Scheduled Posts List */}
+          <div className="text-studio-white/80 mt-4">
+            <h4 className="text-sm text-studio-white/90 mb-2 font-montserrat font-semibold">Scheduled Posts:</h4>
+            {scheduledPosts.length > 0 ? (
+              <div className="space-y-1">
+                {scheduledPosts.map((post, i) => {
+                  const formatDate = (dateStr) => {
+                    if (!dateStr) return 'Unknown date';
+                    try {
+                      const date = new Date(dateStr);
+                      return date.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      });
+                    } catch (e) {
+                      return dateStr;
+                    }
+                  };
+                  
+                  const dateTime = post.dateTime || post.time || post.scheduled_time;
+                  return (
+                    <div key={i} className="text-xs mb-1 text-studio-white/70">
+                      • {post.platform ? post.platform.charAt(0).toUpperCase() + post.platform.slice(1) : 'Unknown'} — {formatDate(dateTime)}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-studio-white/60 font-poppins">No scheduled posts yet.</p>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
+

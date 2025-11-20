@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 pydub
 moviepy
 Pillow
@@ -14,3 +15,15 @@ numpy
 scipy
 gtts
 python-dotenv
+aubio
+reportlab
+PyJWT
+passlib[bcrypt]
+stripe
+sqlalchemy
+aiosqlite
+pytest
+pytest-asyncio
+httpx
+aiofiles
+redis

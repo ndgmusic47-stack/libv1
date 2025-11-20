@@ -5,10 +5,12 @@ Persistent, contextual memory system for AI voices
 
 import json
 import os
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import logging
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -22,21 +24,28 @@ class ProjectMemory:
     - Analytics and metrics
     """
     
-    def __init__(self, session_id: str, media_dir: Path):
+    def __init__(self, session_id: str, media_dir: Path, user_id: Optional[str] = None):
         self.session_id = session_id
+        self.user_id = user_id
         self.media_dir = media_dir
-        self.session_path = media_dir / session_id
-        self.session_path.mkdir(exist_ok=True)
+        if user_id:
+            self.session_path = media_dir / user_id / session_id
+        else:
+            # Backward compatibility: use /media/{user_id}/{session_id}/ if no user_id
+            self.session_path = media_dir / session_id
+        self.session_path.mkdir(parents=True, exist_ok=True)
         self.project_file = self.session_path / "project.json"
-        self.project_data = self._load_or_create()
+        self.project_data = None  # Will be loaded asynchronously
     
-    def _load_or_create(self) -> Dict:
+    async def _load_or_create(self) -> Dict:
         """Load existing project or create new one"""
-        if self.project_file.exists():
-            with open(self.project_file, 'r') as f:
-                return json.load(f)
+        file_exists = await asyncio.to_thread(self.project_file.exists)
+        if file_exists:
+            async with aiofiles.open(self.project_file, 'r') as f:
+                content = await f.read()
+                return json.loads(content)
         
-        return {
+        project_data = {
             "session_id": self.session_id,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
@@ -90,24 +99,41 @@ class ProjectMemory:
             },
             "beat": {
                 "tempo": 120
+            },
+            "release": {
+                "title": None,
+                "artist": None,
+                "genre": None,
+                "mood": None,
+                "release_date": None,
+                "explicit": False,
+                "cover_art": None,
+                "metadata_path": None,
+                "files": []
             }
         }
+        if self.user_id:
+            project_data["user_id"] = self.user_id
+        return project_data
     
-    def save(self):
+    async def save(self):
         """Save project data to disk"""
         self.project_data["updated_at"] = datetime.now().isoformat()
-        with open(self.project_file, 'w') as f:
-            json.dump(self.project_data, f, indent=2)
+        # Ensure user_id is included
+        if self.user_id:
+            self.project_data["user_id"] = self.user_id
+        async with aiofiles.open(self.project_file, 'w') as f:
+            await f.write(json.dumps(self.project_data, indent=2))
         logger.info(f"Project memory saved for session {self.session_id}")
     
-    def update_metadata(self, **kwargs):
+    async def update_metadata(self, **kwargs):
         """Update project metadata"""
         for key, value in kwargs.items():
             if value is not None:
                 self.project_data["metadata"][key] = value
-        self.save()
+        await self.save()
     
-    def add_asset(self, asset_type: str, file_url: str, metadata: Optional[Dict] = None):
+    async def add_asset(self, asset_type: str, file_url: str, metadata: Optional[Dict] = None):
         """Add asset to project memory"""
         if asset_type in ["vocals", "stems", "clips"]:
             self.project_data["assets"][asset_type].append({
@@ -121,9 +147,9 @@ class ProjectMemory:
                 "added_at": datetime.now().isoformat(),
                 "metadata": metadata or {}
             }
-        self.save()
+        await self.save()
     
-    def add_chat_message(self, speaker: str, message: str, voice_name: Optional[str] = None):
+    async def add_chat_message(self, speaker: str, message: str, voice_name: Optional[str] = None):
         """Log chat/voice interaction"""
         self.project_data["chat_log"].append({
             "timestamp": datetime.now().isoformat(),
@@ -131,9 +157,9 @@ class ProjectMemory:
             "voice": voice_name,
             "message": message
         })
-        self.save()
+        await self.save()
     
-    def add_voice_prompt(self, voice_name: str, prompt: str, response: str):
+    async def add_voice_prompt(self, voice_name: str, prompt: str, response: str):
         """Log voice AI interaction"""
         self.project_data["voice_prompts"].append({
             "timestamp": datetime.now().isoformat(),
@@ -141,29 +167,29 @@ class ProjectMemory:
             "prompt": prompt,
             "response": response
         })
-        self.save()
+        await self.save()
     
-    def set_reference_analysis(self, analysis: Dict):
+    async def set_reference_analysis(self, analysis: Dict):
         """Store reference track analysis"""
         self.project_data["reference_analysis"] = {
             "analyzed_at": datetime.now().isoformat(),
             **analysis
         }
-        self.save()
+        await self.save()
     
-    def update_workflow_state(self, **states):
+    async def update_workflow_state(self, **states):
         """Update workflow completion states"""
         for key, value in states.items():
             if key in self.project_data["workflow_state"]:
                 self.project_data["workflow_state"][key] = value
-        self.save()
+        await self.save()
     
-    def update_analytics(self, **metrics):
+    async def update_analytics(self, **metrics):
         """Update analytics metrics"""
         for key, value in metrics.items():
             if key in self.project_data["analytics"]:
                 self.project_data["analytics"][key] = value
-        self.save()
+        await self.save()
     
     def get_context_summary(self) -> str:
         """Get AI-readable context summary for voice agents"""
@@ -230,7 +256,7 @@ class ProjectMemory:
         
         return value
     
-    def update(self, key: str, value: Any):
+    async def update(self, key: str, value: Any):
         """
         Update nested value in project data using dot notation.
         Example: memory.update("metadata.tempo", 120)
@@ -244,9 +270,9 @@ class ProjectMemory:
             data = data[k]
         
         data[keys[-1]] = value
-        self.save()
+        await self.save()
     
-    def advance_stage(self, completed_stage: str, next_stage: Optional[str] = None):
+    async def advance_stage(self, completed_stage: str, next_stage: Optional[str] = None):
         """
         Track stage completion for analytics (stages are not locked in v4).
         
@@ -273,22 +299,50 @@ class ProjectMemory:
         if next_stage:
             self.project_data["workflow"]["current_stage"] = next_stage
         
-        self.save()
+        await self.save()
+    
+    async def jump_to_stage(self, target_stage: str) -> None:
+        """
+        Jump to a specific stage in the workflow (for Skip Forward/Back navigation).
+        
+        Args:
+            target_stage: The stage ID to jump to (must be valid in stage_order)
+        
+        Raises:
+            ValueError: If target_stage is not a valid stage in the workflow
+        """
+        stage_order = ["beat", "lyrics", "upload", "mix", "release", "content", "analytics"]
+        
+        # Validate target_stage is in the workflow
+        if target_stage not in stage_order:
+            raise ValueError(f"Invalid stage '{target_stage}'. Valid stages are: {', '.join(stage_order)}")
+        
+        # Update current stage
+        self.project_data["workflow"]["current_stage"] = target_stage
+        
+        await self.save()
+        logger.info(f"Jumped to stage '{target_stage}' for session {self.session_id}")
 
-def get_or_create_project_memory(session_id: str, media_dir: Path) -> ProjectMemory:
+async def get_or_create_project_memory(session_id: str, media_dir: Path, user_id: Optional[str] = None) -> ProjectMemory:
     """Factory function to get or create project memory"""
-    return ProjectMemory(session_id, media_dir)
+    memory = ProjectMemory(session_id, media_dir, user_id)
+    memory.project_data = await memory._load_or_create()
+    return memory
 
-def list_all_projects(media_dir: Path) -> List[Dict]:
+async def list_all_projects(media_dir: Path) -> List[Dict]:
     """List all projects with their metadata"""
     projects = []
-    for item in media_dir.iterdir():
-        if item.is_dir():
+    items = await asyncio.to_thread(list, media_dir.iterdir())
+    for item in items:
+        is_dir = await asyncio.to_thread(item.is_dir)
+        if is_dir:
             project_file = item / "project.json"
-            if project_file.exists():
+            file_exists = await asyncio.to_thread(project_file.exists)
+            if file_exists:
                 try:
-                    with open(project_file, 'r') as f:
-                        data = json.load(f)
+                    async with aiofiles.open(project_file, 'r') as f:
+                        content = await f.read()
+                        data = json.loads(content)
                         projects.append({
                             "session_id": item.name,
                             "title": data["metadata"].get("track_title", "Untitled"),
@@ -301,3 +355,61 @@ def list_all_projects(media_dir: Path) -> List[Dict]:
                     logger.error(f"Error loading project {item.name}: {e}")
     
     return sorted(projects, key=lambda x: x["updated_at"], reverse=True)
+
+def export_project(memory: ProjectMemory) -> Dict:
+    """Export current project data for saving"""
+    return {
+        "stages": memory.project_data.get("workflow", {}),
+        "release": memory.project_data.get("release", {}),
+        "mix": memory.project_data.get("mix", {}),
+        "content": memory.project_data.get("content", {}),
+        "schedule": memory.project_data.get("schedule", {}),
+        "upload": memory.project_data.get("upload", {}),
+        "lyrics": memory.project_data.get("assets", {}).get("lyrics"),
+        "beat": memory.project_data.get("beat", {}),
+        "metadata": memory.project_data.get("metadata", {}),
+        "assets": memory.project_data.get("assets", {}),
+        "workflow_state": memory.project_data.get("workflow_state", {}),
+        "analytics": memory.project_data.get("analytics", {}),
+        "chat_log": memory.project_data.get("chat_log", []),
+        "voice_prompts": memory.project_data.get("voice_prompts", []),
+        "reference_analysis": memory.project_data.get("reference_analysis"),
+    }
+
+async def import_project(data: Dict, memory: ProjectMemory):
+    """Import project data into memory instance"""
+    # Update all relevant sections
+    if "stages" in data:
+        memory.project_data["workflow"] = data["stages"]
+    if "release" in data:
+        memory.project_data["release"] = data["release"]
+    if "mix" in data:
+        memory.project_data["mix"] = data["mix"]
+    if "content" in data:
+        memory.project_data["content"] = data["content"]
+    if "schedule" in data:
+        memory.project_data["schedule"] = data["schedule"]
+    if "upload" in data:
+        memory.project_data["upload"] = data["upload"]
+    if "lyrics" in data:
+        if "assets" not in memory.project_data:
+            memory.project_data["assets"] = {}
+        memory.project_data["assets"]["lyrics"] = data["lyrics"]
+    if "beat" in data:
+        memory.project_data["beat"] = data["beat"]
+    if "metadata" in data:
+        memory.project_data["metadata"] = data["metadata"]
+    if "assets" in data:
+        memory.project_data["assets"] = data["assets"]
+    if "workflow_state" in data:
+        memory.project_data["workflow_state"] = data["workflow_state"]
+    if "analytics" in data:
+        memory.project_data["analytics"] = data["analytics"]
+    if "chat_log" in data:
+        memory.project_data["chat_log"] = data["chat_log"]
+    if "voice_prompts" in data:
+        memory.project_data["voice_prompts"] = data["voice_prompts"]
+    if "reference_analysis" in data:
+        memory.project_data["reference_analysis"] = data["reference_analysis"]
+    
+    await memory.save()
