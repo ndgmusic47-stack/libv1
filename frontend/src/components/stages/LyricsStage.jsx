@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import React from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
@@ -107,7 +107,7 @@ const estimateBarRhythm = (lyricsText) => {
   return rhythmMap;
 };
 
-export default function LyricsStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function LyricsStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -129,9 +129,12 @@ export default function LyricsStage({ user, openUpgradeModal, sessionId, session
   const handleBeatUpload = (e) => setBeatFile(e.target.files[0]);
 
   const handleGenerateFromBeat = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -161,9 +164,12 @@ export default function LyricsStage({ user, openUpgradeModal, sessionId, session
   };
 
   const handleGenerateFree = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -193,9 +199,12 @@ export default function LyricsStage({ user, openUpgradeModal, sessionId, session
   };
 
   const handleGenerateFromSessionBeat = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -231,9 +240,12 @@ export default function LyricsStage({ user, openUpgradeModal, sessionId, session
   };
 
   const handleGenerate = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -275,9 +287,12 @@ export default function LyricsStage({ user, openUpgradeModal, sessionId, session
   };
 
   const handleRefineLyrics = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

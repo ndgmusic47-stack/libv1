@@ -3,7 +3,7 @@ import { runCleanMix } from '../../utils/api';
 import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function MixStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function MixStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -35,9 +35,12 @@ export default function MixStage({ user, openUpgradeModal, sessionId, sessionDat
   }, [sessionData]);
 
   const handleMixNow = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

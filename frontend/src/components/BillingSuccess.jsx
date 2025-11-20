@@ -1,19 +1,21 @@
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function BillingSuccess() {
   const { refreshUser } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function run() {
       await refreshUser();   // Update GLOBAL user state
       setTimeout(() => {
-        window.location.href = '/';       // Redirect AFTER state is updated
+        navigate('/app');       // Redirect AFTER state is updated
       }, 300);
     }
     run();
-  }, []);
+  }, [navigate, refreshUser]);
 
   return (
     <div className="min-h-screen bg-studio-dark flex items-center justify-center p-4">
@@ -30,7 +32,7 @@ export default function BillingSuccess() {
           Your subscription is now active.
         </p>
         <motion.button
-          onClick={() => window.location.href = '/'}
+          onClick={() => navigate('/app')}
           className="px-6 py-3 bg-studio-red hover:bg-studio-red/80
                    text-studio-white font-montserrat font-semibold rounded-lg transition-colors"
           whileHover={{ scale: 1.02 }}

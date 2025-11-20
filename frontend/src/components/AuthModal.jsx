@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthModal({ isOpen, onClose }) {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, signup } = useAuth();
+  const { login, signup, refreshUser } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,9 +23,11 @@ export default function AuthModal({ isOpen, onClose }) {
       } else {
         await signup(email, password);
       }
+      await refreshUser();
       onClose();
       setEmail('');
       setPassword('');
+      navigate('/app');
     } catch (err) {
       setError(err.message || 'Authentication failed. Please try again.');
     } finally {
@@ -43,21 +47,21 @@ export default function AuthModal({ isOpen, onClose }) {
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       >
         <motion.div
-          className="modal-container bg-studio-gray border border-studio-white/20 rounded-lg max-w-md w-full mx-4"
+          className="modal-container bg-studio-gray border border-studio-white/20 rounded-lg max-w-md w-full mx-4 p-6"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.8, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <h3 className="text-lg text-studio-gold font-montserrat mb-0">
+          <h3 className="text-lg text-studio-gold font-montserrat mb-4">
             {isLogin ? '🔐 Sign In' : '✨ Sign Up'}
           </h3>
           
@@ -70,9 +74,10 @@ export default function AuthModal({ isOpen, onClose }) {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-4 py-2 bg-studio-dark border border-studio-white/20 rounded-lg
-                         text-studio-white font-poppins placeholder-studio-white/40
+                className="w-full px-4 py-2 bg-white border border-studio-white/20 rounded-lg
+                         text-black font-poppins placeholder-gray-500
                          focus:outline-none focus:border-studio-gold disabled:opacity-50"
+                style={{ color: 'black', backgroundColor: 'white' }}
               />
             </div>
             
@@ -84,14 +89,20 @@ export default function AuthModal({ isOpen, onClose }) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={loading}
-                className="w-full px-4 py-2 bg-studio-dark border border-studio-white/20 rounded-lg
-                         text-studio-white font-poppins placeholder-studio-white/40
+                className="w-full px-4 py-2 bg-white border border-studio-white/20 rounded-lg
+                         text-black font-poppins placeholder-gray-500
                          focus:outline-none focus:border-studio-gold disabled:opacity-50"
+                style={{ color: 'black', backgroundColor: 'white' }}
               />
+              {!isLogin && (
+                <p className="text-xs text-studio-white/60 font-poppins mt-1">
+                  Password must be 12+ characters with uppercase, lowercase, number, and special character.
+                </p>
+              )}
             </div>
 
             {error && (
-              <p className="text-sm text-red-400 font-poppins mb-0">
+              <p className="text-sm text-red-400 font-poppins mb-0" style={{ color: '#ef4444' }}>
                 {error}
               </p>
             )}

@@ -21,7 +21,7 @@ function computeViralityScore(caption, title, hook) {
   return Math.min(score, 95);
 }
 
-export default function ContentStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function ContentStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -49,9 +49,12 @@ export default function ContentStage({ user, openUpgradeModal, sessionId, sessio
 
   // V23: Step 1 - Generate Video Idea
   const handleGenerateVideoIdea = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -79,9 +82,12 @@ export default function ContentStage({ user, openUpgradeModal, sessionId, sessio
 
   // V23: Step 2 - Upload Video
   const handleVideoUpload = async (e) => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -121,9 +127,12 @@ export default function ContentStage({ user, openUpgradeModal, sessionId, sessio
 
   // V23: Step 3 - Analyze Video
   const handleAnalyzeVideo = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -156,9 +165,12 @@ export default function ContentStage({ user, openUpgradeModal, sessionId, sessio
 
   // V23: Step 4 - Generate Captions & Hashtags
   const handleGenerateTextPack = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -191,9 +203,12 @@ export default function ContentStage({ user, openUpgradeModal, sessionId, sessio
 
   // V23: Step 5 - Schedule Video (using GETLATE API via /content/schedule)
   const handleScheduleVideo = async (selectedCaption, selectedHashtags, scheduleTime, platform) => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

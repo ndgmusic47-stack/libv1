@@ -4,12 +4,32 @@ const API_BASE = '/api';
 // Phase 2.2: Helper to handle standardized JSON responses {ok, data, message} or {ok, error}
 // Phase 8.4: Preserve error data for paywall checks
 const handleResponse = async (response) => {
- const result = await response.json();
+ // First check HTTP status
+ if (!response.ok) {
+   const result = await response.json().catch(() => ({}));
+   
+   // Handle 400 errors gracefully
+   if (response.status === 400) {
+     return { ok: false, error: result.message || result.error || "Invalid email or password" };
+   }
+   
+   const error = new Error(result.detail || result.message || result.error || 'API request failed');
+   error.status = response.status;
+   // Phase 8.4: For upgrade_required errors, attach full error data to error object
+   if (result.error === "upgrade_required") {
+     error.errorData = result;
+     error.isPaywall = true;
+   }
+   throw error;
+ }
+
+ const result = await response.json().catch(() => ({}));
 
  // Phase 8.4: Check for paywall errors even if response.ok is true (in case backend returns 403 but ok: false)
  if (!result.ok) {
    // Phase 8.4: For upgrade_required errors, attach full error data to error object
-   const error = new Error(result.error || result.message || 'API request failed');
+   const error = new Error(result.error || result.message || result.detail || 'API request failed');
+   error.status = response.status;
    if (result.error === "upgrade_required") {
      error.errorData = result;
      error.isPaywall = true;

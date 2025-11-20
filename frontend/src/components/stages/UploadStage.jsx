@@ -5,7 +5,7 @@ import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function UploadStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function UploadStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -68,9 +68,12 @@ export default function UploadStage({ user, openUpgradeModal, sessionId, session
   }, [sessionId, voice]);
 
   const uploadFile = async (file) => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

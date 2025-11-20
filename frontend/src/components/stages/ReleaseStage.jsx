@@ -4,7 +4,7 @@ import { api } from '../../utils/api';
 import { handlePaywall, checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function ReleaseStage({ user, openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
+export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -125,9 +125,12 @@ export default function ReleaseStage({ user, openUpgradeModal, sessionData, upda
   };
 
   const handleGenerateCover = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -161,9 +164,12 @@ export default function ReleaseStage({ user, openUpgradeModal, sessionData, upda
   };
 
   const handleGenerateCopy = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -190,9 +196,12 @@ export default function ReleaseStage({ user, openUpgradeModal, sessionData, upda
   };
 
   const handleGenerateMetadata = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -229,9 +238,12 @@ export default function ReleaseStage({ user, openUpgradeModal, sessionData, upda
   };
 
   const handleGenerateLyricsPDF = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 
@@ -268,9 +280,12 @@ export default function ReleaseStage({ user, openUpgradeModal, sessionData, upda
   };
 
   const handleDownloadAll = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

@@ -1,9 +1,8 @@
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 export default function BillingCancel() {
-  const navigateToDashboard = () => {
-    window.location.href = '/';
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-studio-dark flex items-center justify-center p-4">
@@ -20,7 +19,7 @@ export default function BillingCancel() {
           Your payment was canceled. You can upgrade at any time.
         </p>
         <motion.button
-          onClick={navigateToDashboard}
+          onClick={() => navigate('/app')}
           className="px-6 py-3 bg-studio-gray/50 hover:bg-studio-gray/70
                    text-studio-white font-montserrat font-semibold rounded-lg transition-colors"
           whileHover={{ scale: 1.02 }}

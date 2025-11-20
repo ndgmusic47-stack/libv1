@@ -5,7 +5,7 @@ import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function BeatStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function BeatStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const access = checkUserAccess(user);
   const allowed = access.allowed;
   const message = access.reason || "Upgrade to continue using this feature.";
@@ -55,9 +55,12 @@ export default function BeatStage({ user, openUpgradeModal, sessionId, sessionDa
   };
 
   const handleCreate = async () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     if (!allowed) {
       openUpgradeModal();
-      alert(message);
       return;
     }
 

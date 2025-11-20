@@ -68,16 +68,18 @@ REQUIRED_KEY_MAP = {
 }
 
 # CORS middleware (Phase 1 hardening)
-allowed_origins = [
-    "http://localhost:5173",
-    "https://labelinabox.com",
-]
+allowed_origins = []
+if settings.frontend_url:
+    allowed_origins = [settings.frontend_url]
+else:
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["X-Total-Count"],
 )
 # Rate limiting middleware (Phase 1)

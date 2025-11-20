@@ -151,7 +151,8 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             value=token,
             httponly=True,
             secure=True,
-            samesite="Lax",
+            samesite="None",
+            path="/",
             max_age=604800  # 7 days in seconds
         )
         
@@ -221,7 +222,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             value=token,
             httponly=True,
             secure=True,
-            samesite="Lax",
+            samesite="None",
+            path="/",
             max_age=604800  # 7 days in seconds
         )
         
@@ -352,7 +354,8 @@ async def logout():
         value="",
         httponly=True,
         secure=True,
-        samesite="Lax",
+        samesite="None",
+        path="/",
         max_age=0
     )
     return response

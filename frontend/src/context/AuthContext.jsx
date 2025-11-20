@@ -6,6 +6,7 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
   // restore session on load
   useEffect(() => {
@@ -18,20 +19,29 @@ export function AuthProvider({ children }) {
         // No session found, user is not authenticated
         setUser(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setInitializing(false);
+      });
   }, []);
 
   const login = async (email, password) => {
-    await api.login(email, password);
-    // After successful login, fetch user session
-    const res = await api.authMe();
+    const res = await api.login(email, password);
+    // Handle error response format
+    if (res && !res.ok && res.error) {
+      throw new Error(res.error);
+    }
+    // Set user directly from login response
     setUser(res.user || res);
   };
 
   const signup = async (email, password) => {
-    await api.signup(email, password);
-    // After successful signup, fetch user session
-    const res = await api.authMe();
+    const res = await api.signup(email, password);
+    // Handle error response format
+    if (res && !res.ok && res.error) {
+      throw new Error(res.error);
+    }
+    // Set user directly from signup response
     setUser(res.user || res);
   };
 
@@ -58,13 +68,8 @@ export function AuthProvider({ children }) {
     return null;
   };
 
-  // Initial page load triggers refresh
-  useEffect(() => {
-    refreshUser();
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, initializing, login, signup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
