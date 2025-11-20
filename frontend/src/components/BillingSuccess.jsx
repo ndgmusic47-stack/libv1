@@ -1,10 +1,19 @@
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 
 export default function BillingSuccess() {
-  // Use window.location for navigation since we don't have react-router
-  const navigateToDashboard = () => {
-    window.location.href = '/';
-  };
+  const { refreshUser } = useAuth();
+
+  useEffect(() => {
+    async function run() {
+      await refreshUser();   // Update GLOBAL user state
+      setTimeout(() => {
+        window.location.href = '/';       // Redirect AFTER state is updated
+      }, 300);
+    }
+    run();
+  }, []);
 
   return (
     <div className="min-h-screen bg-studio-dark flex items-center justify-center p-4">
@@ -18,10 +27,10 @@ export default function BillingSuccess() {
           You're Pro Now 🎉
         </h2>
         <p className="text-studio-white/80 font-poppins mb-6">
-          Your account has been upgraded successfully.
+          Your subscription is now active.
         </p>
         <motion.button
-          onClick={navigateToDashboard}
+          onClick={() => window.location.href = '/'}
           className="px-6 py-3 bg-studio-red hover:bg-studio-red/80
                    text-studio-white font-montserrat font-semibold rounded-lg transition-colors"
           whileHover={{ scale: 1.02 }}

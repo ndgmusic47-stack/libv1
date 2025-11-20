@@ -2,11 +2,32 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
-export default function UpgradeModal({ isOpen, onClose, feature }) {
-  const { user } = useAuth();
+export default function UpgradeModal({ 
+  isOpen, 
+  onClose, 
+  feature,
+  user: propUser,
+  subscription_status,
+  trial_active,
+  trial_days_remaining
+}) {
+  const { user: contextUser } = useAuth();
+  const user = propUser || contextUser;
   if (!isOpen) return null;
 
   const getFeatureMessage = () => {
+    // Priority: user state messages
+    if (user?.trial_active) {
+      return 'You are on a free trial. Upgrade to continue after your trial ends.';
+    }
+    if (user?.subscription_status === 'expired') {
+      return 'Your trial has ended. Subscribe to unlock all features.';
+    }
+    if (user?.subscription_status === 'none') {
+      return 'Upgrade to unlock all premium modules.';
+    }
+    
+    // Fallback to feature-specific messages
     switch (feature) {
       case 'multi_project':
         return 'Upgrade to Pro to create multiple projects';
@@ -67,21 +88,17 @@ export default function UpgradeModal({ isOpen, onClose, feature }) {
           <div className="flex gap-3">
             <motion.button
               onClick={async () => {
-                if (!user) {
-                  onClose();
-                  return;
-                }
                 try {
-                  const result = await api.createCheckoutSession(user.user_id);
-                  if (result && result.url) {
-                    window.location.href = result.url;
+                  const res = await api.createCheckoutSession();
+                  if (res?.url) {
+                    window.location.href = res.url;
                   } else {
                     console.error('No checkout URL returned');
-                    onClose();
+                    alert('Unable to start checkout.');
                   }
                 } catch (err) {
-                  console.error('Failed to create checkout session:', err);
-                  onClose();
+                  console.error('Checkout error:', err);
+                  alert('Unable to start checkout.');
                 }
               }}
               className="flex-1 py-2 bg-studio-red hover:bg-studio-red/80
@@ -89,7 +106,7 @@ export default function UpgradeModal({ isOpen, onClose, feature }) {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
-              Upgrade
+              Upgrade Now
             </motion.button>
             
             <motion.button

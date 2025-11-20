@@ -1,10 +1,21 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
+import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function BeatStage({ sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function BeatStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const access = checkUserAccess(user);
+  const allowed = access.allowed;
+  const message = access.reason || "Upgrade to continue using this feature.";
+
+  useEffect(() => {
+    // Recalculate billing on user change
+    const a = checkUserAccess(user);
+    // No state required — simply triggers rerender
+  }, [user]);
+
   const [mood, setMood] = useState(sessionData.mood || 'energetic');
   const [promptText, setPromptText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,7 +29,9 @@ export default function BeatStage({ sessionId, sessionData, updateSessionData, v
   useEffect(() => {
     const loadCredits = async () => {
       try {
-        const res = await fetch("/api/credits");
+        const res = await fetch("/api/credits", {
+          credentials: "include"
+        });
         const data = await res.json();
         setCredits(data.credits);
       } catch (err) {
@@ -42,6 +55,12 @@ export default function BeatStage({ sessionId, sessionData, updateSessionData, v
   };
 
   const handleCreate = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     setShowModal(false);
     setIsGenerating(true);
     setLoading(true);
@@ -71,7 +90,9 @@ export default function BeatStage({ sessionId, sessionData, updateSessionData, v
       
       // Reload credits after generation
       try {
-        const res = await fetch("/api/credits");
+        const res = await fetch("/api/credits", {
+          credentials: "include"
+        });
         const data = await res.json();
         setCredits(data.credits);
       } catch (err) {
@@ -124,6 +145,14 @@ export default function BeatStage({ sessionId, sessionData, updateSessionData, v
       onVoiceCommand={handleVoiceCommand}
     >
       <div className="w-full h-full flex flex-col items-center justify-start p-6 md:p-10">
+        {!allowed && (
+          <div className="upgrade-banner">
+            <p className="text-center text-red-400 font-semibold">
+              {message}
+            </p>
+          </div>
+        )}
+
         <div className="icon-wrapper text-6xl mb-4">
           🎵
         </div>

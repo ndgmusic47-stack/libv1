@@ -15,7 +15,7 @@ import logging
 
 from database import get_db
 from crud.user import UserRepository
-from auth_utils import hash_password, verify_password, create_jwt, decode_jwt
+from auth_utils import hash_password, verify_password, create_jwt, decode_jwt, calculate_trial_days_remaining, get_subscription_status
 from services.trial_service import TrialService
 from utils.shared_utils import get_cached
 from utils.security_utils import validate_password_strength
@@ -93,9 +93,12 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
         
         user = await user_repo.create_user(user_data)
         
-        # Start trial period for new user
+        # Start trial period for new user (initializes trial_start_date if missing)
         trial_service = TrialService(db, user_repo)
         await trial_service.start_trial(user)
+        
+        # Refresh user to get updated trial_start_date
+        await db.refresh(user)
         
         # Create Stripe customer
         if settings.stripe_secret_key:
@@ -104,7 +107,10 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
                     email=request.email.lower(),
                     metadata={"user_id": str(user.id)}
                 )
-                # Note: stripe_customer_id would need to be added to User model if needed
+                # Update user with Stripe customer ID
+                await user_repo.update_user(user, {"stripe_customer_id": customer.id})
+                await db.commit()
+                await db.refresh(user)
             except Exception as e:
                 # Log error but don't fail signup if Stripe is unavailable
                 logger.warning(f"Failed to create Stripe customer: {e}")
@@ -114,14 +120,32 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
         # Generate JWT token with user ID
         token = create_jwt(str(user.id))
         
+        # Calculate trial info for response
+        trial_days_remaining = calculate_trial_days_remaining(user)
+        trial_active = trial_days_remaining is not None and trial_days_remaining > 0
+        
+        # Get subscription status
+        subscription_status = get_subscription_status(user)
+        
+        # Build response content
+        response_content = {
+            "ok": True,
+            "id": user.id,
+            "user_id": str(user.id),
+            "email": user.email,
+            "is_paid_user": user.is_paid_user,
+            "subscription_status": subscription_status,
+            "trial_active": trial_active,
+            "trial_days_remaining": trial_days_remaining
+        }
+        
+        # Include stripe_customer_id if present
+        if hasattr(user, 'stripe_customer_id') and user.stripe_customer_id:
+            response_content["stripe_customer_id"] = user.stripe_customer_id
+        
         # Create response with httpOnly cookie
         # JWT expiration is 7 days = 604800 seconds
-        response = JSONResponse(
-            content={
-                "ok": True,
-                "user_id": str(user.id)
-            }
-        )
+        response = JSONResponse(content=response_content)
         response.set_cookie(
             key="auth_token",
             value=token,
@@ -161,12 +185,35 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         # Generate JWT token
         token = create_jwt(str(user.id))
         
+        # Calculate trial info for response
+        trial_days_remaining = calculate_trial_days_remaining(user)
+        trial_active = trial_days_remaining is not None and trial_days_remaining > 0
+        
+        # Get subscription status
+        subscription_status = get_subscription_status(user)
+        
+        # Ensure trial_start_date is initialized if missing
+        if not user.trial_start_date:
+            trial_service = TrialService(db, user_repo)
+            await trial_service.start_trial(user)
+            await db.refresh(user)
+            # Recalculate after refresh
+            trial_days_remaining = calculate_trial_days_remaining(user)
+            trial_active = trial_days_remaining is not None and trial_days_remaining > 0
+            subscription_status = get_subscription_status(user)
+        
         # Create response with httpOnly cookie
         # JWT expiration is 7 days = 604800 seconds
         response = JSONResponse(
             content={
                 "ok": True,
-                "user_id": str(user.id)
+                "id": user.id,
+                "user_id": str(user.id),
+                "email": user.email,
+                "is_paid_user": user.is_paid_user,
+                "subscription_status": subscription_status,
+                "trial_active": trial_active,
+                "trial_days_remaining": trial_days_remaining
             }
         )
         response.set_cookie(
@@ -194,7 +241,7 @@ async def _get_user_data_with_caching(user_id: int, user_repo: UserRepository) -
         user_repo: The UserRepository instance
         
     Returns:
-        Dictionary containing user data (id, email, is_active, is_paid_user, trial_start_date)
+        Dictionary containing user data (id, email, is_active, is_paid_user, trial_start_date, subscription_status, stripe fields)
         
     Raises:
         HTTPException: If user is not found
@@ -210,7 +257,11 @@ async def _get_user_data_with_caching(user_id: int, user_repo: UserRepository) -
             "email": user.email,
             "is_active": user.is_active,
             "is_paid_user": user.is_paid_user,
-            "trial_start_date": user.trial_start_date
+            "trial_start_date": user.trial_start_date,
+            "subscription_status": getattr(user, "subscription_status", None) or "trial",
+            "stripe_customer_id": getattr(user, "stripe_customer_id", None),
+            "stripe_subscription_id": getattr(user, "stripe_subscription_id", None),
+            "stripe_price_id": getattr(user, "stripe_price_id", None)
         }
     
     user_dict = await get_cached(
@@ -262,17 +313,23 @@ async def get_current_user_info(
         # Create a simple object from dict for attribute access
         user = SimpleNamespace(**user_dict)
         
-        # Determine plan based on is_paid_user
-        plan = "pro" if user.is_paid_user else "free"
+        # Calculate trial info
+        trial_days_remaining = calculate_trial_days_remaining(user)
+        trial_active = trial_days_remaining is not None and trial_days_remaining > 0
         
-        # Return user info (without password hash)
+        # Get subscription status
+        subscription_status = get_subscription_status(user)
+        
+        # Return full user billing info
         return {
             "ok": True,
+            "id": user.id,
             "user_id": str(user.id),
             "email": user.email,
-            "plan": plan,
             "is_paid_user": user.is_paid_user,
-            "is_active": user.is_active
+            "subscription_status": subscription_status,
+            "trial_active": trial_active,
+            "trial_days_remaining": trial_days_remaining
         }
     except HTTPException:
         raise

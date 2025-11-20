@@ -2,6 +2,7 @@ import { useState } from 'react';
 import React from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
+import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
 // V18.1: Structured lyric parsing helper
@@ -106,7 +107,17 @@ const estimateBarRhythm = (lyricsText) => {
   return rhythmMap;
 };
 
-export default function LyricsStage({ sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function LyricsStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const access = checkUserAccess(user);
+  const allowed = access.allowed;
+  const message = access.reason || "Upgrade to continue using this feature.";
+
+  useEffect(() => {
+    // Recalculate billing on user change
+    const a = checkUserAccess(user);
+    // No state required — simply triggers rerender
+  }, [user]);
+
   const [theme, setTheme] = useState('');
   const [loading, setLoading] = useState(false);
   const [lyrics, setLyrics] = useState(null);
@@ -118,6 +129,12 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
   const handleBeatUpload = (e) => setBeatFile(e.target.files[0]);
 
   const handleGenerateFromBeat = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!beatFile) {
       voice.speak('Please upload a beat file first.');
       return;
@@ -144,6 +161,12 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
   };
 
   const handleGenerateFree = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!theme) {
       voice.speak('Please enter a theme first.');
       return;
@@ -170,6 +193,12 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
   };
 
   const handleGenerateFromSessionBeat = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!sessionData.beatFile) {
       voice.speak('No session beat found. Please create a beat first.');
       return;
@@ -202,6 +231,12 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
   };
 
   const handleGenerate = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     setLoading(true);
     
     try {
@@ -240,6 +275,12 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
   };
 
   const handleRefineLyrics = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!refineText) return;
 
     setLoading(true);
@@ -294,6 +335,13 @@ export default function LyricsStage({ sessionId, sessionData, updateSessionData,
       voice={voice}
     >
       <div className="stage-scroll-container">
+        {!allowed && (
+          <div className="upgrade-banner">
+            <p className="text-center text-red-400 font-semibold">
+              {message}
+            </p>
+          </div>
+        )}
         {!lyrics ? (
           <div className="flex flex-col items-center justify-center gap-8 p-6 md:p-10">
             {/* Beat Player */}

@@ -1,7 +1,9 @@
 """
-Billing Router - API endpoints for Stripe billing webhooks
+Billing Router - API endpoints for Stripe billing integration
+Webhook is defined FIRST to avoid middleware conflicts
 """
 
+import os
 import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, Body, Header
 from fastapi.responses import JSONResponse
@@ -11,18 +13,28 @@ import stripe
 from database import get_db
 from crud.user import UserRepository
 from services.billing_service import BillingService
-from config import settings
+from auth import get_current_user
 
 logger = logging.getLogger(__name__)
+
+# Load Stripe configuration from environment variables
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+# Initialize Stripe client
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+else:
+    logger.warning("STRIPE_SECRET_KEY is not set. Stripe functionality will be unavailable.")
 
 # Create billing router
 billing_router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 
+# WEBHOOK ENDPOINT - MUST BE DEFINED FIRST TO AVOID MIDDLEWARE CONFLICTS
 @billing_router.post("/webhook")
 async def stripe_webhook(
-    payload: bytes = Body(...),
-    stripe_signature: str = Header(..., alias="Stripe-Signature"),
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -31,22 +43,36 @@ async def stripe_webhook(
     This endpoint verifies the Stripe webhook signature before processing events.
     Only verified events are processed to prevent spoofing attacks.
     
+    Always returns 200 OK to Stripe to prevent retries.
+    
     Args:
-        payload: Raw request body as bytes (required for Stripe signature verification)
-        stripe_signature: Stripe signature header value
+        request: FastAPI Request object (for raw body)
         db: Database session dependency
         
     Returns:
-        JSON response indicating success or failure
+        JSON response with 200 status code
     """
     try:
-        # Load webhook secret from settings
-        webhook_secret = settings.stripe_webhook_secret
+        # Load webhook secret from environment variable
+        webhook_secret = STRIPE_WEBHOOK_SECRET
         if not webhook_secret:
             logger.error("STRIPE_WEBHOOK_SECRET environment variable is not set")
-            raise HTTPException(
-                status_code=500,
-                detail="Webhook secret not configured"
+            # Return 200 to Stripe even if secret is missing to prevent retries
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "received": True, "error": "Webhook secret not configured"}
+            )
+        
+        # Get raw request body (required for signature verification)
+        payload = await request.body()
+        
+        # Get Stripe signature from header
+        stripe_signature = request.headers.get("stripe-signature")
+        if not stripe_signature:
+            logger.error("Missing Stripe-Signature header")
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "received": True, "error": "Missing signature header"}
             )
         
         # Verify webhook signature using Stripe's construct_event method
@@ -59,16 +85,17 @@ async def stripe_webhook(
         except stripe.SignatureVerificationError as e:
             # Signature verification failed - this is a fake request
             logger.error(f"Stripe webhook signature verification failed: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid webhook signature"
+            # Return 200 to Stripe to prevent retries (even for invalid signatures)
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "received": True, "error": "Invalid webhook signature"}
             )
         except ValueError as e:
             # Invalid payload format
             logger.error(f"Invalid webhook payload: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid payload format"
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "received": True, "error": "Invalid payload format"}
             )
         
         # Initialize service with dependency injection
@@ -76,29 +103,148 @@ async def stripe_webhook(
         billing_service = BillingService(db, user_repo)
         
         # Process the verified webhook event
-        success = await billing_service.handle_subscription_update(event)
+        success = await billing_service.process_webhook(event)
         
-        if success:
-            return JSONResponse(
-                status_code=200,
-                content={"ok": True, "received": True}
-            )
-        else:
-            # Log error but still return 200 to Stripe (to prevent retries)
-            logger.error("Webhook processing failed but returning 200 to prevent Stripe retries")
-            return JSONResponse(
-                status_code=200,
-                content={"ok": False, "received": True, "error": "Processing failed"}
-            )
+        # Always return 200 to Stripe (even on processing failure) to prevent retries
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": success,
+                "received": True,
+                "event_type": event.type
+            }
+        )
             
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Webhook error: {e}", exc_info=True)
         # Return 200 to Stripe even on error to prevent retries
-        # In production, you might want to return 500 for certain errors
         return JSONResponse(
             status_code=200,
             content={"ok": False, "received": True, "error": str(e)}
         )
 
+
+@billing_router.post("/create-checkout-session")
+async def create_checkout_session(
+    user_data: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a Stripe Checkout session for the current user.
+    
+    Args:
+        user_data: Current user data from get_current_user dependency
+        db: Database session dependency
+        
+    Returns:
+        JSON response with checkout session URL
+    """
+    try:
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="Stripe is not configured"
+            )
+        
+        # Get user from database
+        user_repo = UserRepository(db)
+        user_id = int(user_data["user_id"])
+        user = await user_repo.get_user_by_id(user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+        
+        # Create billing service
+        billing_service = BillingService(db, user_repo)
+        
+        # Create checkout session
+        checkout_url = await billing_service.create_checkout_session(user)
+        
+        if not checkout_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create checkout session"
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "url": checkout_url
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create checkout session: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create checkout session: {str(e)}"
+        )
+
+
+@billing_router.post("/portal")
+async def create_billing_portal_session(
+    user_data: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a Stripe Billing Portal session for the current user.
+    
+    Args:
+        user_data: Current user data from get_current_user dependency
+        db: Database session dependency
+        
+    Returns:
+        JSON response with portal session URL
+    """
+    try:
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=500,
+                detail="Stripe is not configured"
+            )
+        
+        # Get user from database
+        user_repo = UserRepository(db)
+        user_id = int(user_data["user_id"])
+        user = await user_repo.get_user_by_id(user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+        
+        # Create billing service
+        billing_service = BillingService(db, user_repo)
+        
+        # Create portal session
+        portal_url = await billing_service.create_billing_portal_session(user)
+        
+        if not portal_url:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create billing portal session. User may not have a Stripe customer ID."
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": True,
+                "url": portal_url
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create billing portal session: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create billing portal session: {str(e)}"
+        )

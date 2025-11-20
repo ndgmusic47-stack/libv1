@@ -1,8 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, forwardRef } from 'react';
+import { checkUserAccess } from '../utils/paywall';
 import '../styles/Timeline.css';
 
-const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline, setProject, setCurrentStage: setCurrentStageProp, project, sessionData }, ref) => {
+const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline, setProject, setCurrentStage: setCurrentStageProp, project, sessionData, user, openUpgradeModal }, ref) => {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [wasAllComplete, setWasAllComplete] = useState(false);
   
@@ -88,6 +89,11 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
     }
   }, [isGoalReached, wasAllComplete, showGoalModal]);
 
+  useEffect(() => {
+    // Re-evaluates locked/unlocked state when user updates
+    checkUserAccess(user);
+  }, [user]);
+
   const handleRestartCycle = () => {
     setShowGoalModal(false);
     // Reset workflow (handled by parent)
@@ -128,7 +134,13 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
             <motion.div
               key={stage.id}
               className={`stage ${status}`}
-              onClick={() => onStageClick(stage.id)}
+              onClick={() => {
+                if (!checkUserAccess(user).allowed) {
+                  openUpgradeModal(stage.id);
+                  return;
+                }
+                onStageClick(stage.id);
+              }}
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.95 }}
               style={{ cursor: 'pointer' }}

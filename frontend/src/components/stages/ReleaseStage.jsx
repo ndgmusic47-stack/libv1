@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
-import { handlePaywall } from '../../utils/paywall';
+import { handlePaywall, checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function ReleaseStage({ sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, openUpgradeModal, masterFile, onComplete }) {
+export default function ReleaseStage({ user, openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
+  const access = checkUserAccess(user);
+  const allowed = access.allowed;
+  const message = access.reason || "Upgrade to continue using this feature.";
+
+  useEffect(() => {
+    // Recalculate billing on user change
+    const a = checkUserAccess(user);
+    // No state required — simply triggers rerender
+  }, [user]);
+
   // Form inputs
   const [trackTitle, setTrackTitle] = useState(sessionData.trackTitle || sessionData.metadata?.track_title || '');
   const [artistName, setArtistName] = useState(sessionData.artistName || sessionData.metadata?.artist_name || 'NP22');
@@ -115,6 +125,12 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
   };
 
   const handleGenerateCover = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!trackTitle || !artistName) {
       voice.speak('Please enter track title and artist name first');
       return;
@@ -145,6 +161,12 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
   };
 
   const handleGenerateCopy = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!trackTitle || !artistName) {
       voice.speak('Please enter track title and artist name first');
       return;
@@ -168,6 +190,12 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
   };
 
   const handleGenerateMetadata = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     setGeneratingMetadata(true);
     try {
       const result = await api.generateReleaseMetadata(
@@ -201,6 +229,12 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
   };
 
   const handleGenerateLyricsPDF = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     try {
       const lyrics = sessionData.lyricsData || sessionData.lyrics || '';
       if (!lyrics || !lyrics.trim()) {
@@ -234,6 +268,12 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
   };
 
   const handleDownloadAll = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     try {
       voice.speak("Preparing release pack...");
       const result = await api.downloadAllReleaseFiles(currentSessionId);
@@ -264,6 +304,13 @@ export default function ReleaseStage({ sessionData, updateSessionData, voice, on
       voice={voice}
     >
       <div className="stage-scroll-container">
+        {!allowed && (
+          <div className="upgrade-banner">
+            <p className="text-center text-red-400 font-semibold">
+              {message}
+            </p>
+          </div>
+        )}
         <div className="flex flex-col gap-8 p-6 md:p-10 max-w-4xl mx-auto">
           
           {/* Master Audio Preview Section (optional - only show if available) */}

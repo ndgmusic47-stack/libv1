@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../utils/api';
+import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
 // Copy to clipboard helper
@@ -20,7 +21,17 @@ function computeViralityScore(caption, title, hook) {
   return Math.min(score, 95);
 }
 
-export default function ContentStage({ sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function ContentStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const access = checkUserAccess(user);
+  const allowed = access.allowed;
+  const message = access.reason || "Upgrade to continue using this feature.";
+
+  useEffect(() => {
+    // Recalculate billing on user change
+    const a = checkUserAccess(user);
+    // No state required — simply triggers rerender
+  }, [user]);
+
   const [activeTab, setActiveTab] = useState('social');
   const [selectedPlatform, setSelectedPlatform] = useState('tiktok');
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -38,6 +49,12 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
   // V23: Step 1 - Generate Video Idea
   const handleGenerateVideoIdea = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     setIdeaLoading(true);
     try {
       voice.speak('Generating video idea...');
@@ -62,6 +79,12 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
   // V23: Step 2 - Upload Video
   const handleVideoUpload = async (e) => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -98,6 +121,12 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
   // V23: Step 3 - Analyze Video
   const handleAnalyzeVideo = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!videoTranscript) {
       voice.speak('Please upload a video first');
       return;
@@ -127,6 +156,12 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
   // V23: Step 4 - Generate Captions & Hashtags
   const handleGenerateTextPack = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     setTextPackLoading(true);
     try {
       voice.speak('Generating captions and hashtags...');
@@ -156,6 +191,12 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
   // V23: Step 5 - Schedule Video (using GETLATE API via /content/schedule)
   const handleScheduleVideo = async (selectedCaption, selectedHashtags, scheduleTime, platform) => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!uploadedVideo || !selectedCaption || !scheduleTime) {
       voice.speak('Please complete all steps first');
       return;
@@ -232,6 +273,13 @@ export default function ContentStage({ sessionId, sessionData, updateSessionData
 
         {/* Content */}
         <div className="stage-scroll-container">
+          {!allowed && (
+            <div className="upgrade-banner">
+              <p className="text-center text-red-400 font-semibold">
+                {message}
+              </p>
+            </div>
+          )}
           <AnimatePresence mode="wait">
             {activeTab === 'social' && (
               <SocialContentTab

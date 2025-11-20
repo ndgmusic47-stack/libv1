@@ -25,7 +25,10 @@ class Settings(BaseSettings):
     
     # Stripe billing configuration
     stripe_secret_key: Optional[str] = Field(default=None, alias="STRIPE_SECRET_KEY")
+    stripe_publishable_key: Optional[str] = Field(default=None, alias="STRIPE_PUBLISHABLE_KEY")
     stripe_webhook_secret: Optional[str] = Field(default=None, alias="STRIPE_WEBHOOK_SECRET")
+    stripe_price_id: Optional[str] = Field(default=None, alias="STRIPE_PRICE_ID")
+    stripe_product_id: Optional[str] = Field(default=None, alias="STRIPE_PRODUCT_ID")
     
     # API keys for external services
     beatoven_api_key: Optional[str] = Field(default=None, alias="BEATOVEN_API_KEY")

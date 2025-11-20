@@ -16,6 +16,10 @@ class User(Base):
     is_paid_user = Column(Boolean, default=False, nullable=False)
     trial_start_date = Column(String, nullable=True)
     last_release_timestamp = Column(String, nullable=True)
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    stripe_price_id = Column(String, nullable=True)
+    subscription_status = Column(String, default="trial", nullable=True)
     
     # Relationship placeholder for future one-to-many linking (User to Project)
     # projects = relationship("Project", back_populates="owner")

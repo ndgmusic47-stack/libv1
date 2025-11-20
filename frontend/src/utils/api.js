@@ -24,9 +24,16 @@ const handleResponse = async (response) => {
 export const api = {
  // ========== AUTHENTICATION ==========
 
- authMe: async (token) => {
+ authMe: async () => {
    const response = await fetch(`${API_BASE}/auth/me`, {
-     headers: { "Authorization": `Bearer ${token}` }
+     credentials: "include"
+   });
+   return handleResponse(response);
+ },
+
+ refreshUser: async () => {
+   const response = await fetch(`${API_BASE}/auth/me`, {
+     credentials: "include"
    });
    return handleResponse(response);
  },
@@ -34,6 +41,7 @@ export const api = {
  login: async (email, password) => {
    const response = await fetch(`${API_BASE}/auth/login`, {
      method: "POST",
+     credentials: "include",
      headers: {"Content-Type": "application/json"},
      body: JSON.stringify({ email, password })
    });
@@ -43,8 +51,17 @@ export const api = {
  signup: async (email, password) => {
    const response = await fetch(`${API_BASE}/auth/signup`, {
      method: "POST",
+     credentials: "include",
      headers: {"Content-Type": "application/json"},
      body: JSON.stringify({ email, password })
+   });
+   return handleResponse(response);
+ },
+
+ logout: async () => {
+   const response = await fetch(`${API_BASE}/auth/logout`, {
+     method: "POST",
+     credentials: "include"
    });
    return handleResponse(response);
  },
@@ -52,12 +69,16 @@ export const api = {
  // ========== V4 PROJECT MEMORY ==========
 
  listProjects: async () => {
-   const response = await fetch(`${API_BASE}/projects`);
+   const response = await fetch(`${API_BASE}/projects`, {
+     credentials: "include"
+   });
    return response.json();
  },
 
  getProject: async (sessionId) => {
-   const response = await fetch(`${API_BASE}/projects/${sessionId}`);
+   const response = await fetch(`${API_BASE}/projects/${sessionId}`, {
+     credentials: "include"
+   });
    const result = await response.json();
    if (!result.ok) {
      throw new Error(result.error || 'Failed to get project');
@@ -68,7 +89,9 @@ export const api = {
  // ========== V4 VOICE SYSTEM ==========
 
  getVoices: async () => {
-   const response = await fetch(`${API_BASE}/voices`);
+   const response = await fetch(`${API_BASE}/voices`, {
+     credentials: "include"
+   });
    return response.json();
  },
 
@@ -76,6 +99,7 @@ export const api = {
  voiceSpeak: async (persona, text, sessionId = null) => {
    const response = await fetch(`${API_BASE}/voices/say`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({
        persona,
@@ -89,6 +113,7 @@ export const api = {
  voiceStop: async (sessionId = null) => {
    const response = await fetch(`${API_BASE}/voices/stop`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({
        session_id: sessionId,
@@ -100,6 +125,7 @@ export const api = {
  voicePause: async (sessionId = null) => {
    const response = await fetch(`${API_BASE}/voices/pause`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({
        session_id: sessionId,
@@ -111,6 +137,7 @@ export const api = {
  voiceMute: async (sessionId = null) => {
    const response = await fetch(`${API_BASE}/voices/mute`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({
        session_id: sessionId,
@@ -126,6 +153,7 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/voices/${voiceId}/respond`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -141,6 +169,7 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/reference/analyze`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -157,6 +186,7 @@ export const api = {
    };
    const response = await fetch(`${API_BASE}/beats/create`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify(body),
    });
@@ -164,13 +194,16 @@ export const api = {
  },
 
  getBeatCredits: async () => {
-   const response = await fetch(`${API_BASE}/beats/credits`);
+   const response = await fetch(`${API_BASE}/beats/credits`, {
+     credentials: "include"
+   });
    return handleResponse(response);
  },
 
  generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    const response = await fetch(`${API_BASE}/songs/write`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({
        genre,
@@ -195,6 +228,7 @@ export const api = {
    
    const response = await fetch(`${API_BASE}/lyrics/from_beat`, {
      method: 'POST',
+     credentials: "include",
      body,
    });
    return handleResponse(response);
@@ -204,6 +238,7 @@ export const api = {
  generateFreeLyrics: async (theme) => {
    const response = await fetch(`${API_BASE}/lyrics/free`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({ theme }),
    });
@@ -214,6 +249,7 @@ export const api = {
  refineLyrics: async (lyricsText, instruction, bpm = null, history = [], structuredLyrics = null, rhythmMap = null) => {
    const response = await fetch(`${API_BASE}/lyrics/refine`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({ 
        lyrics: lyricsText, 
@@ -232,12 +268,8 @@ export const api = {
    formData.append('file', file);
    if (sessionId) formData.append('session_id', sessionId);
 
-   const token = localStorage.getItem("auth_token");
-   const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-
    const response = await fetch(`${API_BASE}/upload-audio`, {
      method: "POST",
-     headers,
      credentials: "include",
      body: formData,
    });
@@ -251,6 +283,7 @@ export const api = {
   generateReleaseCover: async (sessionId, trackTitle, artistName, genre, mood, style = 'realistic') => {
     const response = await fetch(`${API_BASE}/release/cover`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -267,6 +300,7 @@ export const api = {
   selectReleaseCover: async (sessionId, coverUrl) => {
     const response = await fetch(`${API_BASE}/release/select-cover`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -279,6 +313,7 @@ export const api = {
   listReleaseFiles: async (sessionId) => {
     const response = await fetch(`${API_BASE}/release/files?session_id=${sessionId}`, {
       method: 'GET',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
     });
     const result = await handleResponse(response);
@@ -288,6 +323,7 @@ export const api = {
   getReleasePack: async (sessionId) => {
     const response = await fetch(`${API_BASE}/release/pack?session_id=${sessionId}`, {
       method: 'GET',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
     });
     return handleResponse(response);
@@ -296,6 +332,7 @@ export const api = {
   generateReleaseCopy: async (sessionId, trackTitle, artistName, genre, mood, lyrics = '') => {
     const response = await fetch(`${API_BASE}/release/copy`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -312,6 +349,7 @@ export const api = {
   generateLyricsPDF: async (sessionId, title, artist, lyrics) => {
     const response = await fetch(`${API_BASE}/release/lyrics`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -324,12 +362,11 @@ export const api = {
   },
 
   generateReleaseMetadata: async (sessionId, trackTitle, artistName, mood, genre, explicit, releaseDate) => {
-    const token = localStorage.getItem('auth_token');
     const response = await fetch(`${API_BASE}/release/metadata`, {
       method: 'POST',
+      credentials: "include",
       headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         session_id: sessionId,
@@ -347,6 +384,7 @@ export const api = {
   downloadAllReleaseFiles: async (sessionId) => {
     const response = await fetch(`${API_BASE}/release/download-all`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -375,6 +413,7 @@ export const api = {
   generateVideoIdea: async (sessionId, title, lyrics, mood, genre) => {
     const response = await fetch(`${API_BASE}/content/idea`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -394,6 +433,7 @@ export const api = {
 
     const response = await fetch(`${API_BASE}/content/upload-video`, {
       method: 'POST',
+      credentials: "include",
       body: formData,
     });
     return handleResponse(response);
@@ -402,6 +442,7 @@ export const api = {
   analyzeVideo: async (transcript, title, lyrics, mood, genre) => {
     const response = await fetch(`${API_BASE}/content/analyze`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         transcript,
@@ -417,6 +458,7 @@ export const api = {
   generateContentText: async (sessionId, title, transcript, lyrics, mood, genre) => {
     const response = await fetch(`${API_BASE}/content/generate-text`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -433,6 +475,7 @@ export const api = {
   scheduleVideo: async (sessionId, videoUrl, caption, hashtags, platform, scheduleTime) => {
     const response = await fetch(`${API_BASE}/content/schedule`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -449,6 +492,7 @@ export const api = {
   saveScheduled: async (data) => {
     const response = await fetch(`${API_BASE}/content/save-scheduled`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
@@ -458,6 +502,7 @@ export const api = {
   getScheduled: async (sessionId) => {
     const response = await fetch(`${API_BASE}/content/get-scheduled?session_id=${sessionId}`, {
       method: 'GET',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
     });
     return handleResponse(response);
@@ -467,12 +512,16 @@ export const api = {
  // ========== ANALYTICS ==========
 
  getProjectAnalytics: async (sessionId) => {
-   const response = await fetch(`${API_BASE}/analytics/session/${sessionId}`);
+   const response = await fetch(`${API_BASE}/analytics/session/${sessionId}`, {
+     credentials: "include"
+   });
    return handleResponse(response);
  },
 
  getDashboardAnalytics: async () => {
-   const response = await fetch(`${API_BASE}/analytics/dashboard/all`);
+   const response = await fetch(`${API_BASE}/analytics/dashboard/all`, {
+     credentials: "include"
+   });
    return handleResponse(response);
  },
 
@@ -486,6 +535,7 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/analytics/update`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -494,6 +544,7 @@ export const api = {
  analyzeVideoBeats: async (formData) => {
    const response = await fetch(`${API_BASE}/video/analyze`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -507,6 +558,7 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/video/beat-sync`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -521,19 +573,23 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/video/export`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
  },
 
  getSocialPlatforms: async () => {
-   const response = await fetch(`${API_BASE}/social/platforms`);
+   const response = await fetch(`${API_BASE}/social/platforms`, {
+     credentials: "include"
+   });
    return handleResponse(response);
  },
 
   schedulePost: async (sessionId, platform, caption, whenIso) => {
     const response = await fetch(`${API_BASE}/social/posts`, {
       method: 'POST',
+      credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         session_id: sessionId,
@@ -550,7 +606,9 @@ export const api = {
    const url = platform
      ? `${API_BASE}/social/posts/${sessionId}?platform=${platform}`
      : `${API_BASE}/social/posts/${sessionId}`;
-   const response = await fetch(url);
+   const response = await fetch(url, {
+     credentials: "include"
+   });
    return response.json();
  },
 
@@ -561,13 +619,16 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/social/cancel`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
  },
 
  getOptimalTimes: async (platform, timezone = 'EST') => {
-   const response = await fetch(`${API_BASE}/social/optimal-times/${platform}?timezone=${timezone}`);
+   const response = await fetch(`${API_BASE}/social/optimal-times/${platform}?timezone=${timezone}`, {
+     credentials: "include"
+   });
    return response.json();
  },
 
@@ -578,6 +639,7 @@ export const api = {
 
    const response = await fetch(`${API_BASE}/intent`, {
      method: 'POST',
+     credentials: "include",
      body: formData,
    });
    return response.json();
@@ -649,6 +711,7 @@ export const api = {
  advanceStage: async (sessionId) => {
    const response = await fetch(`${API_BASE}/projects/${sessionId}/advance`, {
      method: 'POST',
+     credentials: "include",
      headers: { 'Content-Type': 'application/json' },
    });
    return handleResponse(response);
@@ -657,12 +720,11 @@ export const api = {
  // ========== PROJECT SAVE/LOAD (PHASE 8.3) ==========
 
  saveProject: async (userId, projectId, projectData) => {
-   const token = localStorage.getItem('auth_token');
    const response = await fetch(`${API_BASE}/projects/save`, {
      method: 'POST',
+     credentials: "include",
      headers: { 
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${token}`
+       'Content-Type': 'application/json'
      },
      body: JSON.stringify({
        userId,
@@ -674,22 +736,18 @@ export const api = {
  },
 
  listProjects: async () => {
-   const token = localStorage.getItem('auth_token');
    const response = await fetch(`${API_BASE}/projects/list`, {
-     headers: { 
-       'Authorization': `Bearer ${token}`
-     }
+     credentials: "include"
    });
    return handleResponse(response);
  },
 
  loadProject: async (projectId) => {
-   const token = localStorage.getItem('auth_token');
    const response = await fetch(`${API_BASE}/projects/load`, {
      method: 'POST',
+     credentials: "include",
      headers: { 
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${token}`
+       'Content-Type': 'application/json'
      },
      body: JSON.stringify({ projectId })
    });
@@ -698,13 +756,12 @@ export const api = {
 
  // ========== BILLING (PHASE 9) ==========
 
- createCheckoutSession: async (userId, priceId = null) => {
-   const token = localStorage.getItem('auth_token');
+ createCheckoutSession: async (userId = null, priceId = null) => {
    const response = await fetch(`${API_BASE}/billing/create-checkout-session`, {
      method: 'POST',
+     credentials: "include",
      headers: { 
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${token}`
+       'Content-Type': 'application/json'
      },
      body: JSON.stringify({ userId, priceId })
    });
@@ -712,23 +769,38 @@ export const api = {
  },
 
  createPortalSession: async () => {
-   const token = localStorage.getItem('auth_token');
    const response = await fetch(`${API_BASE}/billing/portal`, {
      method: 'POST',
+     credentials: "include",
      headers: { 
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${token}`
+       'Content-Type': 'application/json'
      }
    });
    return handleResponse(response);
   },
 };
 
+// Export standalone functions for convenience
+export async function createCheckoutSession() {
+  return api.createCheckoutSession();
+}
+
+export async function createPortalSession() {
+  return api.createPortalSession();
+}
+
+export async function refreshUser() {
+  return api.refreshUser();
+}
+
 export const mixAudio = async (userId, sessionId) => {
   try {
     const res = await fetch(
       `${API_BASE}/mix/${userId}/${sessionId}`,
-      { method: "POST" }
+      { 
+        method: "POST",
+        credentials: "include"
+      }
     );
     if (!res.ok) throw new Error("Mix failed");
     return await res.json();
@@ -749,16 +821,9 @@ export const processSingleMix = async (userId, file, toggles, sessionId = null) 
     formData.append('apply_saturation', toggles.apply_saturation || false);
     if (sessionId) formData.append('session_id', sessionId);
 
-    const token = localStorage.getItem('auth_token');
-    const headers = {};
-    // Don't set Content-Type for FormData - browser sets it automatically with boundary
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const response = await fetch(`${API_BASE}/mix/process-single/${userId}`, {
       method: 'POST',
-      headers,
+      credentials: "include",
       body: formData,
     });
     
@@ -774,9 +839,9 @@ export const processSingleMix = async (userId, file, toggles, sessionId = null) 
 export const runCleanMix = async (vocalUrl, beatUrl, sessionId) => {
   const response = await fetch(`${API_BASE}/mix/run-clean`, {
     method: "POST",
+    credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${localStorage.getItem("auth_token")}`
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
       session_id: sessionId,

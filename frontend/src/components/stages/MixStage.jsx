@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
 import { runCleanMix } from '../../utils/api';
+import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function MixStage({ sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function MixStage({ user, openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const access = checkUserAccess(user);
+  const allowed = access.allowed;
+  const message = access.reason || "Upgrade to continue using this feature.";
+
+  useEffect(() => {
+    // Recalculate billing on user change
+    const a = checkUserAccess(user);
+    // No state required — simply triggers rerender
+  }, [user]);
+
   const [mixing, setMixing] = useState(false);
   const [mixUrl, setMixUrl] = useState(null);
   const [error, setError] = useState(null);
@@ -24,6 +35,12 @@ export default function MixStage({ sessionId, sessionData, updateSessionData, vo
   }, [sessionData]);
 
   const handleMixNow = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      alert(message);
+      return;
+    }
+
     if (!sessionData?.vocalFile || !sessionData?.beatFile) {
       setError("Missing vocal or beat. Please complete Upload and Beat stages.");
       return;
@@ -62,6 +79,13 @@ export default function MixStage({ sessionId, sessionData, updateSessionData, vo
       voice={voice}
     >
       <div className="stage-scroll-container">
+        {!allowed && (
+          <div className="upgrade-banner">
+            <p className="text-center text-red-400 font-semibold">
+              {message}
+            </p>
+          </div>
+        )}
         <div className="flex flex-col items-center justify-center gap-8 p-6 md:p-10 max-w-2xl mx-auto">
           
           {/* Effect Toggles */}

@@ -17,7 +17,7 @@ export default function BillingCancel() {
           Payment Canceled
         </h2>
         <p className="text-studio-white/60 font-poppins mb-6">
-          Your payment was canceled. No charges were made.
+          Your payment was canceled. You can upgrade at any time.
         </p>
         <motion.button
           onClick={navigateToDashboard}
@@ -26,7 +26,7 @@ export default function BillingCancel() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          Return to Dashboard
+          Return Home
         </motion.button>
       </motion.div>
     </div>

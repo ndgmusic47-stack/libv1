@@ -19,11 +19,11 @@ import BillingCancel from './components/BillingCancel';
 import { useVoice } from './hooks/useVoice';
 import { useAuth } from './context/AuthContext';
 import { api } from './utils/api';
-import { handlePaywall } from './utils/paywall';
+import { handlePaywall, checkUserAccess } from './utils/paywall';
 import './styles/ErrorBoundary.css';
 
 function App() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, logout, refreshUser } = useAuth();
   const [activeStage, setActiveStage] = useState(null);
   const [isStageOpen, setIsStageOpen] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
@@ -45,6 +45,7 @@ function App() {
     localStorage.setItem('liab_session_id', newId);
     return newId;
   });
+  const hasShownExpiredModal = useRef(false);
   const [sessionData, setSessionData] = useState({
     beatFile: null,
     lyricsData: null,
@@ -116,7 +117,16 @@ function App() {
     setSessionData((prev) => ({ ...prev, ...data }));
   };
 
+  const canAccessStage = (stageId) => {
+    if (!user) return false;  // must be logged in
+    return checkUserAccess(user).allowed; 
+  };
+
   const handleStageClick = (stageId) => {
+    if (!canAccessStage(stageId)) {
+      openUpgradeModal(stageId);
+      return; 
+    }
     setActiveStage(stageId);
     setIsStageOpen(true);
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -291,8 +301,29 @@ function App() {
     }
   }, [showAccountMenu]);
 
+  // Auto-open upgrade modal when trial is expired
+  useEffect(() => {
+    if (!user) return;
+
+    const expired = 
+      !user.trial_active &&
+      user.subscription_status !== "active";
+
+    if (expired && !hasShownExpiredModal.current) {
+      hasShownExpiredModal.current = true;
+      openUpgradeModal();
+    }
+  }, [user]);
+
+  // Auto-refresh user when app starts
+  useEffect(() => {
+    if (refreshUser) refreshUser();
+  }, []);
+
   const renderStage = () => {
     const commonProps = {
+      user,
+      openUpgradeModal,
       sessionId,
       sessionData,
       updateSessionData,
@@ -300,7 +331,6 @@ function App() {
       onClose: handleClose,
       onNext: goToNextStage,
       completeStage: completeCurrentStage,
-      openUpgradeModal,
     };
 
     switch (activeStage) {
@@ -447,6 +477,8 @@ function App() {
             onStageClick={handleStageClick}
             showBackButton={!!activeStage}
             onBackToTimeline={handleBackToTimeline}
+            user={user}
+            openUpgradeModal={openUpgradeModal}
           />
         </div>
       )}
@@ -490,6 +522,10 @@ function App() {
           setUpgradeFeature(null);
         }}
         feature={upgradeFeature}
+        user={user}
+        subscription_status={user?.subscription_status}
+        trial_active={user?.trial_active}
+        trial_days_remaining={user?.trial_days_remaining}
       />
 
       {/* Save Toast */}
