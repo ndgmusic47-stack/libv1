@@ -7,8 +7,9 @@ from pathlib import Path
 import logging
 import traceback
 
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -237,7 +238,37 @@ app.include_router(social_router)
 FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
 
 if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+    @app.get("/{path:path}")
+    async def serve_frontend(request: Request, path: str):
+        """
+        Serve frontend files or index.html for SPA routes.
+        Handles React Router client-side routing.
+        """
+        # Skip API routes and media routes (shouldn't reach here but safety check)
+        if path.startswith("api/") or path.startswith("media/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Try to serve the actual file if it exists (JS, CSS, images, etc.)
+        file_path = FRONTEND_DIST / path
+        if path and file_path.exists() and file_path.is_file():
+            # Security: Ensure file is within FRONTEND_DIST directory
+            try:
+                file_path.resolve().relative_to(FRONTEND_DIST.resolve())
+            except ValueError:
+                # Path outside FRONTEND_DIST, deny access
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Access denied")
+            return FileResponse(str(file_path))
+        
+        # For all SPA routes (like /signup, /login, etc.), return index.html
+        index_path = FRONTEND_DIST / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        
+        # If index.html doesn't exist, return 404
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Frontend not built")
 
 if __name__ == "__main__":
     import uvicorn
