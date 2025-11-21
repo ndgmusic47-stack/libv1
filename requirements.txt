@@ -21,7 +21,6 @@ PyJWT
 passlib[bcrypt]
 stripe
 sqlalchemy
-asyncpg==0.29.0
 aiosqlite
 pytest
 pytest-asyncio
