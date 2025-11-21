@@ -18,7 +18,8 @@ python-dotenv
 aubio
 reportlab
 PyJWT
-passlib[bcrypt]
+passlib
+argon2-cffi
 stripe
 sqlalchemy
 aiosqlite
