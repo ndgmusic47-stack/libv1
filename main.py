@@ -170,24 +170,6 @@ async def log_session_config():
     logger.error(f"Frontend URL: {settings.frontend_url}")
     logger.error(f"Google Redirect URI: {settings.google_redirect_uri}")
     
-    # Log middleware order (from outermost to innermost)
-    logger.error("=" * 80)
-    logger.error("MIDDLEWARE ORDER (from outermost to innermost):")
-    logger.error("=" * 80)
-    middleware_stack = []
-    current = app.user_middleware_stack
-    idx = 1
-    while hasattr(current, '__wrapped__') or hasattr(current, 'app'):
-        if hasattr(current, 'cls'):
-            middleware_name = current.cls.__name__ if hasattr(current.cls, '__name__') else str(current.cls)
-            middleware_stack.append(f"{idx}. {middleware_name}")
-            idx += 1
-        current = getattr(current, '__wrapped__', getattr(current, 'app', None))
-        if current is None:
-            break
-    for mw in middleware_stack:
-        logger.error(f"  {mw}")
-    
     # Check for multiple workers (memory sessions break with multiple workers)
     logger.error("=" * 80)
     logger.error("WORKER CONFIGURATION CHECK:")
