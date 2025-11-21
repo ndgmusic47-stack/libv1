@@ -67,6 +67,8 @@ async def google_auth_callback(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
+    # Prevent FastAPI/Starlette from auto-parsing Google OAuth tokens as form fields (avoids password>72 bytes bcrypt error)
+    request._form = None
     """
     Handle Google OAuth callback.
     Fetches user profile, creates or logs in user, and redirects to frontend.

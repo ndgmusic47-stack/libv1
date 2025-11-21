@@ -26,6 +26,7 @@ from routers.release_router import release_router
 from routers.analytics_router import analytics_router
 from routers.social_router import social_router
 from routers.google_auth_router import google_auth_router
+from admin_tools import admin_router
 from utils.rate_limit import RateLimiterMiddleware
 from database import init_db
 from config import settings
@@ -243,6 +244,7 @@ app.include_router(media_router)
 app.include_router(release_router)
 app.include_router(analytics_router)
 app.include_router(social_router)
+app.include_router(admin_router)
 
 # ============================================================================
 # FRONTEND SERVING (MUST BE LAST - AFTER ALL API ROUTES)
