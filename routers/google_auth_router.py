@@ -50,11 +50,78 @@ async def google_login(request: Request):
         if not settings.google_client_id or not settings.google_client_secret or not settings.google_redirect_uri:
             raise HTTPException(status_code=500, detail="Google OAuth not configured")
         
+        # DEBUG: Log session state before OAuth redirect
+        session_state_before = dict(request.session) if hasattr(request, 'session') else {}
+        logger.error("=" * 80)
+        logger.error("GOOGLE LOGIN - BEFORE REDIRECT (DEBUG)")
+        logger.error("=" * 80)
+        logger.error(f"Session contents before redirect: {session_state_before}")
+        logger.error(f"Session cookie in request: {request.cookies.get('session', 'NOT FOUND')}")
+        logger.error(f"Redirect URI: {settings.google_redirect_uri}")
+        logger.error("=" * 80)
+        
         # Get the OAuth client
         redirect_uri = settings.google_redirect_uri
         
         # Create authorization URL and redirect
-        return await oauth.google.authorize_redirect(request, redirect_uri)
+        # Authlib automatically generates state and stores it in request.session
+        response = await oauth.google.authorize_redirect(request, redirect_uri)
+        
+        # DEBUG: Log session state after OAuth redirect (state should be stored now)
+        session_state_after = dict(request.session) if hasattr(request, 'session') else {}
+        
+        # CRITICAL: Check if Set-Cookie header is present in response
+        set_cookie_headers = response.headers.getlist("set-cookie") if hasattr(response.headers, 'getlist') else []
+        if not set_cookie_headers:
+            # Try alternative method
+            set_cookie_raw = response.headers.get("set-cookie", "")
+            if set_cookie_raw:
+                set_cookie_headers = [set_cookie_raw]
+        
+        logger.error("=" * 80)
+        logger.error("GOOGLE LOGIN - AFTER REDIRECT (DEBUG)")
+        logger.error("=" * 80)
+        logger.error(f"Session contents after redirect: {session_state_after}")
+        # Authlib stores state with key pattern: '_state_{provider_name}'
+        authlib_state_key = '_state_google'
+        if authlib_state_key in session_state_after:
+            logger.error(f"✅ STATE STORED IN SESSION: {authlib_state_key} = {session_state_after[authlib_state_key][:50]}...")
+        else:
+            logger.error(f"❌ STATE NOT FOUND IN SESSION (expected key: {authlib_state_key})")
+            logger.error(f"Available session keys: {list(session_state_after.keys())}")
+        
+        # CRITICAL: Log Set-Cookie headers in response
+        logger.error("=" * 80)
+        logger.error("RESPONSE HEADERS - SET-COOKIE (CRITICAL)")
+        logger.error("=" * 80)
+        if set_cookie_headers:
+            logger.error(f"✅ Set-Cookie headers found: {len(set_cookie_headers)}")
+            for idx, cookie in enumerate(set_cookie_headers):
+                logger.error(f"  Cookie #{idx + 1}: {cookie[:200]}...")  # First 200 chars
+                if "session" in cookie.lower():
+                    logger.error(f"    ✅ 'session' cookie found in Set-Cookie")
+                    # Extract cookie attributes
+                    if "SameSite=None" in cookie or "SameSite=none" in cookie:
+                        logger.error(f"    ✅ SameSite=None present")
+                    if "Secure" in cookie:
+                        logger.error(f"    ✅ Secure flag present")
+                    if "HttpOnly" in cookie:
+                        logger.error(f"    ✅ HttpOnly flag present")
+        else:
+            logger.error(f"❌ NO Set-Cookie headers found in response!")
+            logger.error(f"   This means the session cookie is NOT being sent to the browser!")
+        
+        # Log all response headers for debugging
+        logger.error(f"All response headers: {dict(response.headers)}")
+        
+        # Log request forwarding info
+        logger.error(f"Request x-forwarded-proto: {request.headers.get('x-forwarded-proto', 'NOT SET')}")
+        logger.error(f"Request x-forwarded-for: {request.headers.get('x-forwarded-for', 'NOT SET')}")
+        logger.error(f"Request host: {request.headers.get('host', 'NOT SET')}")
+        logger.error(f"Request URL scheme: {request.url.scheme}")
+        logger.error("=" * 80)
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:
@@ -74,11 +141,73 @@ async def google_auth_callback(
     Fetches user profile, creates or logs in user, and redirects to frontend.
     """
     try:
+        # DEBUG: Log session and query params BEFORE state validation
+        session_contents = dict(request.session) if hasattr(request, 'session') else {}
+        incoming_state = request.query_params.get('state', 'NOT FOUND')
+        authlib_state_key = '_state_google'
+        stored_state = session_contents.get(authlib_state_key, 'NOT FOUND')
+        
+        logger.error("=" * 80)
+        logger.error("GOOGLE CALLBACK - BEFORE STATE VALIDATION (DEBUG)")
+        logger.error("=" * 80)
+        logger.error(f"Incoming state param from Google: {incoming_state}")
+        logger.error(f"Stored state in session ({authlib_state_key}): {stored_state}")
+        logger.error(f"Full session contents: {session_contents}")
+        logger.error(f"Session cookie in request.cookies: {request.cookies.get('session', 'NOT FOUND')}")
+        logger.error(f"All cookies in request.cookies: {dict(request.cookies)}")
+        logger.error(f"Request URL: {request.url}")
+        logger.error(f"Request URL scheme: {request.url.scheme}")
+        logger.error(f"Request URL host: {request.url.hostname}")
+        logger.error(f"Request headers (relevant):")
+        
+        # Parse Cookie header manually to see all cookies
+        cookie_header = request.headers.get('cookie', 'NOT FOUND')
+        logger.error(f"  - Cookie header (raw): {cookie_header[:500]}...")
+        if cookie_header != 'NOT FOUND':
+            # Parse cookies from header
+            cookies_list = cookie_header.split(';')
+            logger.error(f"  - Cookie header parsed: {len(cookies_list)} cookies found")
+            for cookie in cookies_list:
+                cookie = cookie.strip()
+                if cookie.lower().startswith('session'):
+                    logger.error(f"    ✅ Found 'session' cookie in header: {cookie[:100]}...")
+                logger.error(f"    Cookie: {cookie[:150]}")
+        
+        logger.error(f"  - Referer: {request.headers.get('referer', 'NOT FOUND')}")
+        logger.error(f"  - Origin: {request.headers.get('origin', 'NOT FOUND')}")
+        logger.error(f"  - x-forwarded-proto: {request.headers.get('x-forwarded-proto', 'NOT SET')}")
+        logger.error(f"  - x-forwarded-for: {request.headers.get('x-forwarded-for', 'NOT SET')}")
+        logger.error(f"  - host: {request.headers.get('host', 'NOT SET')}")
+        
+        # Check if session exists as attribute
+        logger.error(f"Request has 'session' attribute: {hasattr(request, 'session')}")
+        if hasattr(request, 'session'):
+            logger.error(f"Request.session type: {type(request.session)}")
+            logger.error(f"Request.session ID (if available): {getattr(request.session, 'id', 'N/A')}")
+        
+        logger.error("=" * 80)
+        
         if not settings.google_client_id or not settings.google_client_secret or not settings.google_redirect_uri:
             raise HTTPException(status_code=500, detail="Google OAuth not configured")
         
         # Fetch access token and user profile from Google
-        token = await oauth.google.authorize_access_token(request)
+        # This internally validates the state from session against incoming state param
+        # If state mismatch, this will raise an error
+        try:
+            token = await oauth.google.authorize_access_token(request)
+        except Exception as state_error:
+            # Log detailed error about state mismatch
+            logger.error("=" * 80)
+            logger.error("STATE VALIDATION FAILED (DEBUG)")
+            logger.error("=" * 80)
+            logger.error(f"Error type: {type(state_error).__name__}")
+            logger.error(f"Error message: {str(state_error)}")
+            logger.error(f"Incoming state: {incoming_state}")
+            logger.error(f"Stored state: {stored_state}")
+            logger.error(f"States match: {incoming_state == stored_state}")
+            logger.error(f"Session was empty: {len(session_contents) == 0}")
+            logger.error("=" * 80)
+            raise
         user_info = token.get("userinfo")
         
         if not user_info:
@@ -141,6 +270,15 @@ async def google_auth_callback(
                     # Log error but don't fail signup if Stripe is unavailable
                     logger.warning(f"Failed to create Stripe customer: {e}")
         
+        # DEBUG: Log successful state validation
+        logger.error("=" * 80)
+        logger.error("GOOGLE CALLBACK - STATE VALIDATED SUCCESSFULLY (DEBUG)")
+        logger.error("=" * 80)
+        logger.error(f"✅ State validation passed")
+        logger.error(f"✅ Access token received from Google")
+        logger.error(f"Email: {email}")
+        logger.error("=" * 80)
+        
         # Generate JWT token
         jwt_token = create_jwt(str(user.id))
         
@@ -160,6 +298,15 @@ async def google_auth_callback(
             path="/",
             max_age=604800  # 7 days in seconds
         )
+        
+        # DEBUG: Log final session state after callback
+        final_session = dict(request.session) if hasattr(request, 'session') else {}
+        logger.error("=" * 80)
+        logger.error("GOOGLE CALLBACK - FINAL STATE (DEBUG)")
+        logger.error("=" * 80)
+        logger.error(f"Session contents after callback: {final_session}")
+        logger.error(f"Redirecting to: {frontend_url}")
+        logger.error("=" * 80)
         
         return response
         

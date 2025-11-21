@@ -65,6 +65,58 @@ def _is_render_env() -> bool:
     """Check if running in Render.com environment"""
     return bool(settings.render or settings.render_external_url or settings.render_service_name)
 
+# Diagnostic middleware for Google OAuth cookie tracking
+class CookieDiagnosticMiddleware(BaseHTTPMiddleware):
+    """Logs cookie presence at middleware layer for OAuth debugging"""
+    async def dispatch(self, request, call_next):
+        # Only log for Google auth endpoints to reduce noise
+        if "/api/auth/google" in str(request.url.path):
+            logger.error("=" * 80)
+            logger.error("COOKIE DIAGNOSTIC MIDDLEWARE - REQUEST")
+            logger.error("=" * 80)
+            logger.error(f"Path: {request.url.path}")
+            logger.error(f"Method: {request.method}")
+            logger.error(f"Cookies in request.cookies: {dict(request.cookies)}")
+            logger.error(f"Cookie header (raw): {request.headers.get('cookie', 'NOT FOUND')[:300]}")
+            logger.error(f"Session cookie present: {'session' in request.cookies}")
+            logger.error(f"Request has 'session' attribute: {hasattr(request, 'session')}")
+            if hasattr(request, 'session'):
+                try:
+                    session_dict = dict(request.session) if hasattr(request.session, '__iter__') else {}
+                    logger.error(f"Session contents: {session_dict}")
+                except Exception as e:
+                    logger.error(f"Could not read session: {e}")
+            logger.error(f"x-forwarded-proto: {request.headers.get('x-forwarded-proto', 'NOT SET')}")
+            logger.error("=" * 80)
+        
+        response = await call_next(request)
+        
+        # Log response Set-Cookie headers
+        if "/api/auth/google" in str(request.url.path):
+            set_cookie_headers = response.headers.getlist("set-cookie") if hasattr(response.headers, 'getlist') else []
+            if not set_cookie_headers:
+                set_cookie_raw = response.headers.get("set-cookie", "")
+                if set_cookie_raw:
+                    set_cookie_headers = [set_cookie_raw]
+            
+            logger.error("=" * 80)
+            logger.error("COOKIE DIAGNOSTIC MIDDLEWARE - RESPONSE")
+            logger.error("=" * 80)
+            logger.error(f"Path: {request.url.path}")
+            logger.error(f"Status: {response.status_code}")
+            if set_cookie_headers:
+                logger.error(f"✅ Set-Cookie headers found: {len(set_cookie_headers)}")
+                for cookie in set_cookie_headers:
+                    if "session" in cookie.lower():
+                        logger.error(f"  ✅ Session cookie in Set-Cookie: {cookie[:200]}...")
+                    else:
+                        logger.error(f"  Other cookie: {cookie[:200]}...")
+            else:
+                logger.error(f"❌ NO Set-Cookie headers in response!")
+            logger.error("=" * 80)
+        
+        return response
+
 # Uncaught exception middleware - logs all unhandled exceptions and returns 500
 class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -77,16 +129,81 @@ class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
                 content={"ok": False, "error": "Internal Server Error"}
             )
 
+# Add diagnostic middleware FIRST (outermost) to track cookies through all layers
+app.add_middleware(CookieDiagnosticMiddleware)
 app.add_middleware(UncaughtExceptionMiddleware)
 
 # Session middleware for Google SSO flow
+# NOTE: Must be added BEFORE routers to ensure session is available in route handlers
+# CRITICAL: same_site='none' REQUIRES secure=True (https_only=True) for cross-domain cookies
+# This is necessary for Google OAuth redirects from accounts.google.com
+session_config = {
+    "secret_key": settings.session_secret_key or DEFAULT_SESSION_SECRET,
+    "max_age": None,  # Session expires when browser closes (better for OAuth state)
+    "same_site": "none",  # Required for cross-domain OAuth redirects
+    "https_only": True,  # Always True for same_site='none' (browser requirement)
+    # Note: session_cookie parameter not available in standard Starlette SessionMiddleware
+    # Cookie name defaults to "session" - this is the expected behavior
+}
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
-    max_age=7 * 24 * 60 * 60,  # 7 days in seconds
-    same_site='none',
-    https_only=_is_render_env()
+    **session_config
 )
+
+# Log session configuration at startup for debugging
+@app.on_event("startup")
+async def log_session_config():
+    """Log effective session middleware configuration for debugging"""
+    import os
+    import socket
+    
+    logger.error("=" * 80)
+    logger.error("SESSION MIDDLEWARE CONFIGURATION (DEBUG)")
+    logger.error("=" * 80)
+    logger.error(f"Secret Key: {'SET' if (settings.session_secret_key or DEFAULT_SESSION_SECRET) else 'MISSING'}")
+    logger.error(f"Secret Key Length: {len(settings.session_secret_key or DEFAULT_SESSION_SECRET)}")
+    logger.error(f"Max Age: {session_config['max_age']} (None = session cookie)")
+    logger.error(f"Same Site: {session_config['same_site']}")
+    logger.error(f"HTTPS Only: {session_config['https_only']}")
+    logger.error(f"Session Cookie Name: 'session' (default, not configurable in Starlette)")
+    logger.error(f"Is Render Environment: {_is_render_env()}")
+    logger.error(f"Frontend URL: {settings.frontend_url}")
+    logger.error(f"Google Redirect URI: {settings.google_redirect_uri}")
+    
+    # Log middleware order (from outermost to innermost)
+    logger.error("=" * 80)
+    logger.error("MIDDLEWARE ORDER (from outermost to innermost):")
+    logger.error("=" * 80)
+    middleware_stack = []
+    current = app.user_middleware_stack
+    idx = 1
+    while hasattr(current, '__wrapped__') or hasattr(current, 'app'):
+        if hasattr(current, 'cls'):
+            middleware_name = current.cls.__name__ if hasattr(current.cls, '__name__') else str(current.cls)
+            middleware_stack.append(f"{idx}. {middleware_name}")
+            idx += 1
+        current = getattr(current, '__wrapped__', getattr(current, 'app', None))
+        if current is None:
+            break
+    for mw in middleware_stack:
+        logger.error(f"  {mw}")
+    
+    # Check for multiple workers (memory sessions break with multiple workers)
+    logger.error("=" * 80)
+    logger.error("WORKER CONFIGURATION CHECK:")
+    logger.error("=" * 80)
+    workers_env = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS") or "Not set (defaults to 1)"
+    logger.error(f"WEB_CONCURRENCY / UVICORN_WORKERS: {workers_env}")
+    logger.error(f"⚠️  WARNING: If multiple workers are used, in-memory sessions WILL BREAK!")
+    logger.error(f"⚠️  Each worker has its own memory, so session set in worker 1 won't be accessible in worker 2")
+    logger.error(f"⚠️  Solution: Use Redis-backed sessions or ensure single worker")
+    
+    # Check hostname (helps identify if multiple instances)
+    hostname = socket.gethostname()
+    logger.error(f"Hostname: {hostname}")
+    logger.error(f"Process ID: {os.getpid()}")
+    
+    logger.error("=" * 80)
 
 # Phase 1: Required API keys for startup validation
 REQUIRED_KEYS = [
