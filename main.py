@@ -147,10 +147,11 @@ class RedirectCookieMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # If this is a redirect response (302/303/307) AND the session contains data,
-        # force the session to be marked as modified so SessionMiddleware writes the cookie.
+        # Starlette sessions do NOT support `.modified`
+        # Use a manual force-write flag instead
         if response.status_code in (302, 303, 307):
             if hasattr(request, "session") and request.session:
-                request.session.modified = True
+                request.session["_force_write"] = True
 
         return response
 

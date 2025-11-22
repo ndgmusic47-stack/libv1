@@ -70,6 +70,24 @@ async def google_login(request: Request):
         # DEBUG: Log session state after OAuth redirect (state should be stored now)
         session_state_after = dict(request.session) if hasattr(request, 'session') else {}
         
+        # Find the actual state key that authlib created (might be dynamic like _state_google_{state_value})
+        # Search for keys starting with '_state_google'
+        authlib_state_key = None
+        for key in session_state_after.keys():
+            if key.startswith('_state_google'):
+                authlib_state_key = key
+                break
+        
+        # If not found with pattern, try the static key
+        if not authlib_state_key:
+            authlib_state_key = '_state_google'
+        
+        # NEW: Store the pointer to this key so callback can retrieve it
+        if authlib_state_key in session_state_after:
+            request.session["_state_google_current"] = authlib_state_key
+            # Ensure session is seen as modified
+            request.session.modified = True
+        
         # CRITICAL: Check if Set-Cookie header is present in response
         set_cookie_headers = response.headers.getlist("set-cookie") if hasattr(response.headers, 'getlist') else []
         if not set_cookie_headers:
@@ -82,10 +100,10 @@ async def google_login(request: Request):
         logger.error("GOOGLE LOGIN - AFTER REDIRECT (DEBUG)")
         logger.error("=" * 80)
         logger.error(f"Session contents after redirect: {session_state_after}")
-        # Authlib stores state with key pattern: '_state_{provider_name}'
-        authlib_state_key = '_state_google'
+        # Authlib stores state with key pattern: '_state_{provider_name}' or '_state_{provider_name}_{state_value}'
         if authlib_state_key in session_state_after:
             logger.error(f"✅ STATE STORED IN SESSION: {authlib_state_key} = {session_state_after[authlib_state_key][:50]}...")
+            logger.error(f"✅ POINTER STORED: _state_google_current = {authlib_state_key}")
         else:
             logger.error(f"❌ STATE NOT FOUND IN SESSION (expected key: {authlib_state_key})")
             logger.error(f"Available session keys: {list(session_state_after.keys())}")
@@ -144,14 +162,24 @@ async def google_auth_callback(
         # DEBUG: Log session and query params BEFORE state validation
         session_contents = dict(request.session) if hasattr(request, 'session') else {}
         incoming_state = request.query_params.get('state', 'NOT FOUND')
-        authlib_state_key = '_state_google'
-        stored_state = session_contents.get(authlib_state_key, 'NOT FOUND')
+        
+        # Load the key pointer saved during login redirect
+        dynamic_key = request.session.get("_state_google_current")
+        
+        stored_state = None
+        if dynamic_key:
+            stored_state = request.session.get(dynamic_key)
+        
+        # DEBUG: If still missing, log available keys
+        if not stored_state:
+            logger.error(f"Google OAuth: state key '{dynamic_key}' not found. Available: {list(request.session.keys())}")
         
         logger.error("=" * 80)
         logger.error("GOOGLE CALLBACK - BEFORE STATE VALIDATION (DEBUG)")
         logger.error("=" * 80)
         logger.error(f"Incoming state param from Google: {incoming_state}")
-        logger.error(f"Stored state in session ({authlib_state_key}): {stored_state}")
+        logger.error(f"Dynamic key pointer (_state_google_current): {dynamic_key}")
+        logger.error(f"Stored state in session ({dynamic_key}): {stored_state}")
         logger.error(f"Full session contents: {session_contents}")
         logger.error(f"Session cookie in request.cookies: {request.cookies.get('session', 'NOT FOUND')}")
         logger.error(f"All cookies in request.cookies: {dict(request.cookies)}")
