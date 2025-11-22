@@ -42,50 +42,6 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
- // ========== AUTHENTICATION ==========
-
- authMe: async () => {
-   const response = await fetch(`${API_BASE}/auth/me`, {
-     credentials: "include"
-   });
-   return handleResponse(response);
- },
-
- refreshUser: async () => {
-   const response = await fetch(`${API_BASE}/auth/me`, {
-     credentials: "include"
-   });
-   return handleResponse(response);
- },
-
- login: async (email, password) => {
-   const response = await fetch(`${API_BASE}/auth/login`, {
-     method: "POST",
-     credentials: "include",
-     headers: {"Content-Type": "application/json"},
-     body: JSON.stringify({ email, password })
-   });
-   return handleResponse(response);
- },
-
- signup: async (email, password) => {
-   const response = await fetch(`${API_BASE}/auth/signup`, {
-     method: "POST",
-     credentials: "include",
-     headers: {"Content-Type": "application/json"},
-     body: JSON.stringify({ email, password })
-   });
-   return handleResponse(response);
- },
-
- logout: async () => {
-   const response = await fetch(`${API_BASE}/auth/logout`, {
-     method: "POST",
-     credentials: "include"
-   });
-   return handleResponse(response);
- },
-
  // ========== V4 PROJECT MEMORY ==========
 
  listProjects: async () => {
@@ -300,13 +256,13 @@ export const api = {
 
 
   // NEW RELEASE MODULE ENDPOINTS
-  generateReleaseCover: async (sessionId, trackTitle, artistName, genre, mood, style = 'realistic') => {
-    const response = await fetch(`${API_BASE}/release/cover`, {
+  generateReleaseCover: async (projectId, trackTitle, artistName, genre, mood, style = 'realistic') => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/cover`, {
       method: 'POST',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: projectId,
         track_title: trackTitle,
         artist_name: artistName,
         genre,
@@ -317,21 +273,21 @@ export const api = {
     return handleResponse(response);
   },
 
-  selectReleaseCover: async (sessionId, coverUrl) => {
-    const response = await fetch(`${API_BASE}/release/select-cover`, {
+  selectReleaseCover: async (projectId, coverUrl) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/select-cover`, {
       method: 'POST',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: projectId,
         cover_url: coverUrl,
       }),
     });
     return handleResponse(response);
   },
 
-  listReleaseFiles: async (sessionId) => {
-    const response = await fetch(`${API_BASE}/release/files?session_id=${sessionId}`, {
+  listReleaseFiles: async (projectId) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/files`, {
       method: 'GET',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
@@ -340,8 +296,8 @@ export const api = {
     return result.data || result;
   },
 
-  getReleasePack: async (sessionId) => {
-    const response = await fetch(`${API_BASE}/release/pack?session_id=${sessionId}`, {
+  getReleasePack: async (projectId) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/pack`, {
       method: 'GET',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
@@ -349,13 +305,13 @@ export const api = {
     return handleResponse(response);
   },
 
-  generateReleaseCopy: async (sessionId, trackTitle, artistName, genre, mood, lyrics = '') => {
-    const response = await fetch(`${API_BASE}/release/copy`, {
+  generateReleaseCopy: async (projectId, trackTitle, artistName, genre, mood, lyrics = '') => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/copy`, {
       method: 'POST',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: projectId,
         track_title: trackTitle,
         artist_name: artistName,
         genre,
@@ -366,13 +322,13 @@ export const api = {
     return handleResponse(response);
   },
 
-  generateLyricsPDF: async (sessionId, title, artist, lyrics) => {
-    const response = await fetch(`${API_BASE}/release/lyrics`, {
+  generateLyricsPDF: async (projectId, title, artist, lyrics) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/lyrics`, {
       method: 'POST',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: projectId,
         title,
         artist,
         lyrics,
@@ -381,15 +337,15 @@ export const api = {
     return handleResponse(response);
   },
 
-  generateReleaseMetadata: async (sessionId, trackTitle, artistName, mood, genre, explicit, releaseDate) => {
-    const response = await fetch(`${API_BASE}/release/metadata`, {
+  generateReleaseMetadata: async (projectId, trackTitle, artistName, mood, genre, explicit, releaseDate) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/metadata`, {
       method: 'POST',
       credentials: "include",
       headers: { 
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        session_id: sessionId,
+        session_id: projectId,
         track_title: trackTitle,
         artist_name: artistName,
         mood,
@@ -401,14 +357,11 @@ export const api = {
     return handleResponse(response);
   },
 
-  downloadAllReleaseFiles: async (sessionId) => {
-    const response = await fetch(`${API_BASE}/release/download-all`, {
+  downloadAllReleaseFiles: async (projectId) => {
+    const response = await fetch(`${API_BASE}/projects/${projectId}/release/download-all`, {
       method: 'POST',
       credentials: "include",
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-      }),
     });
     return handleResponse(response);
   },
@@ -739,7 +692,7 @@ export const api = {
 
  // ========== PROJECT SAVE/LOAD (PHASE 8.3) ==========
 
- saveProject: async (userId, projectId, projectData) => {
+ saveProject: async (projectId, projectData) => {
    const response = await fetch(`${API_BASE}/projects/save`, {
      method: 'POST',
      credentials: "include",
@@ -747,7 +700,6 @@ export const api = {
        'Content-Type': 'application/json'
      },
      body: JSON.stringify({
-       userId,
        projectId: projectId || null,
        projectData
      })
@@ -776,14 +728,14 @@ export const api = {
 
  // ========== BILLING (PHASE 9) ==========
 
- createCheckoutSession: async (userId = null, priceId = null) => {
+ createCheckoutSession: async (email = null, priceId = null) => {
    const response = await fetch(`${API_BASE}/billing/create-checkout-session`, {
      method: 'POST',
      credentials: "include",
      headers: { 
        'Content-Type': 'application/json'
      },
-     body: JSON.stringify({ userId, priceId })
+     body: JSON.stringify({ email, priceId })
    });
    return handleResponse(response);
  },
@@ -809,17 +761,16 @@ export async function createPortalSession() {
   return api.createPortalSession();
 }
 
-export async function refreshUser() {
-  return api.refreshUser();
-}
 
-export const mixAudio = async (userId, sessionId) => {
+export const mixAudio = async (projectId) => {
   try {
     const res = await fetch(
-      `${API_BASE}/mix/${userId}/${sessionId}`,
+      `${API_BASE}/projects/${projectId}/mix`,
       { 
         method: "POST",
-        credentials: "include"
+        credentials: "include",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
       }
     );
     if (!res.ok) throw new Error("Mix failed");
@@ -831,7 +782,7 @@ export const mixAudio = async (userId, sessionId) => {
 };
 
 // Process single file with mastering effects
-export const processSingleMix = async (userId, file, toggles, sessionId = null) => {
+export const processSingleMix = async (file, toggles, sessionId = null) => {
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -841,7 +792,7 @@ export const processSingleMix = async (userId, file, toggles, sessionId = null) 
     formData.append('apply_saturation', toggles.apply_saturation || false);
     if (sessionId) formData.append('session_id', sessionId);
 
-    const response = await fetch(`${API_BASE}/mix/process-single/${userId}`, {
+    const response = await fetch(`${API_BASE}/mix/process-single`, {
       method: 'POST',
       credentials: "include",
       body: formData,

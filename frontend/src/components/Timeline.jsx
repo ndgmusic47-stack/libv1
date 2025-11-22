@@ -1,11 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, forwardRef } from 'react';
-import { checkUserAccess } from '../utils/paywall';
-import { useAuth } from '../context/AuthContext';
 import '../styles/Timeline.css';
 
-const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline, setProject, setCurrentStage: setCurrentStageProp, project, sessionData, user, openUpgradeModal, openAuthModal }, ref) => {
-  const { initializing } = useAuth();
+const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline, setProject, setCurrentStage: setCurrentStageProp, project, sessionData, openUpgradeModal }, ref) => {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [wasAllComplete, setWasAllComplete] = useState(false);
   
@@ -91,10 +88,6 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
     }
   }, [isGoalReached, wasAllComplete, showGoalModal]);
 
-  useEffect(() => {
-    // Re-evaluates locked/unlocked state when user updates
-    checkUserAccess(user);
-  }, [user]);
 
   const handleRestartCycle = () => {
     setShowGoalModal(false);
@@ -137,16 +130,6 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
               key={stage.id}
               className={`stage ${status}`}
               onClick={() => {
-                if (initializing) return;
-                if (!user) {
-                  openAuthModal();
-                  return;
-                }
-                const access = checkUserAccess(user);
-                if (!access.allowed) {
-                  openUpgradeModal(stage.id);
-                  return;
-                }
                 onStageClick(stage.id);
               }}
               whileHover={{ scale: 1.1 }}

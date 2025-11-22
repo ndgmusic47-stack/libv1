@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 # Constants
-MEDIA_DIR = Path("./media")
+from config.settings import MEDIA_DIR
 ASSETS_DIR = Path("./assets")
 
 
@@ -31,7 +31,6 @@ class BeatService:
     
     async def create_beat_track(
         self,
-        user_id: str,
         session_id: str,
         prompt: Optional[str] = None,
         mood: str = "energetic",
@@ -46,7 +45,7 @@ class BeatService:
         Returns:
             Dict with beat_url, status, provider, progress, and session_id
         """
-        session_path = get_session_media_path(session_id, user_id)
+        session_path = get_session_media_path(session_id)
         
         # Log request
         if duration_sec is not None:
@@ -73,12 +72,12 @@ class BeatService:
             logger.warning("BEATOVEN_API_KEY is not set. Proceeding to fallback logic.")
             return await self._handle_fallback_beat(
                 session_path=session_path,
-                user_id=user_id,
                 session_id=session_id,
                 bpm=bpm,
                 mood=mood,
                 genre=genre,
-                duration_sec=duration_sec
+                duration_sec=duration_sec,
+                db=db
             )
         
         # Try Beatoven API first (key is available at this point)
@@ -87,11 +86,9 @@ class BeatService:
             task_id = await self._call_beatoven_compose(prompt_text)
             
             # 2. Poll for status and finalize
-            current_user = {"id": user_id}  # For compatibility with existing code
             result = await self._poll_beatoven_status(
                 task_id=task_id,
                 session_path=session_path,
-                current_user=current_user,
                 session_id=session_id,
                 mood=mood,
                 genre=genre,
@@ -109,7 +106,6 @@ class BeatService:
         # FALLBACK: Always return a beat (ALWAYS succeeds)
         return await self._handle_fallback_beat(
             session_path=session_path,
-            user_id=user_id,
             session_id=session_id,
             bpm=bpm,
             mood=mood,
@@ -170,7 +166,6 @@ class BeatService:
         self,
         task_id: str,
         session_path: Path,
-        current_user: Dict[str, str],
         session_id: str,
         mood: str,
         genre: str,
@@ -183,7 +178,6 @@ class BeatService:
         Args:
             task_id: The task ID from the compose API call
             session_path: Path to the session media directory
-            current_user: User dictionary with user information
             session_id: Session ID
             mood: Mood of the beat
             genre: Genre of the beat
@@ -199,8 +193,6 @@ class BeatService:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        
-        user_id = current_user.get("id", "")
         
         # Poll for completion (up to 3 minutes)
         async with httpx.AsyncClient() as client:
@@ -248,13 +240,13 @@ class BeatService:
                         extracted_metadata["key"] = meta.get("key")
                     
                     # Update project memory
-                    memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id, db)
+                    memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
                     await memory.update_metadata(tempo=extracted_bpm, mood=mood, genre=genre)
-                    await memory.add_asset("beat", f"/media/{user_id}/{session_id}/beat.mp3", {"bpm": extracted_bpm, "mood": mood, "metadata": extracted_metadata})
+                    beat_url = f"/media/{session_id}/beat.mp3"
+                    await memory.add_asset("beat", beat_url, {"bpm": extracted_bpm, "mood": mood, "metadata": extracted_metadata})
                     await memory.advance_stage("beat", "lyrics")
                     
                     # Prepare beat_url and beat_meta for project memory
-                    beat_url = f"/media/{user_id}/{session_id}/beat.mp3"
                     beat_meta = {
                         "bpm": extracted_bpm,
                         "mood": mood,
@@ -295,7 +287,6 @@ class BeatService:
     async def _handle_fallback_beat(
         self,
         session_path: Path,
-        user_id: str,
         session_id: str,
         bpm: Optional[int],
         mood: str,
@@ -330,14 +321,14 @@ class BeatService:
             logger.info(f"⚠️ Beatoven unavailable, using fallback demo beat")
             
             # Update project memory
-            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id, db)
+            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
             demo_metadata = {"duration": 60, "bpm": bpm or 120, "key": "C"}
             await memory.update_metadata(tempo=bpm or 120, mood=mood, genre=genre)
-            await memory.add_asset("beat", f"/media/{user_id}/{session_id}/beat.mp3", {"bpm": bpm or 120, "mood": mood, "source": "demo", "metadata": demo_metadata})
+            beat_url = f"/media/{session_id}/beat.mp3"
+            await memory.add_asset("beat", beat_url, {"bpm": bpm or 120, "mood": mood, "source": "demo", "metadata": demo_metadata})
             await memory.advance_stage("beat", "lyrics")
             
             # Prepare beat_url and beat_meta for project memory
-            beat_url = f"/media/{user_id}/{session_id}/beat.mp3"
             beat_meta = {
                 "bpm": bpm or 120,
                 "mood": mood,
@@ -375,17 +366,18 @@ class BeatService:
                 silent_audio = AudioSegment.silent(duration=(duration_sec or 60) * 1000)
                 silent_audio.export(str(output_file), format="mp3")
                 
-                memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id, db)
+                memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
                 silent_metadata = {"duration": duration_sec or 60, "bpm": bpm or 120, "key": "C"}
                 await memory.update_metadata(tempo=bpm or 120, mood=mood, genre=genre)
-                await memory.add_asset("beat", f"/media/{user_id}/{session_id}/beat.mp3", {"bpm": bpm or 120, "mood": mood, "source": "silent_fallback", "metadata": silent_metadata})
+                beat_url = f"/media/{session_id}/beat.mp3"
+                await memory.add_asset("beat", beat_url, {"bpm": bpm or 120, "mood": mood, "source": "silent_fallback", "metadata": silent_metadata})
                 
                 # Auto-save to project memory
                 try:
                     if "beat" not in memory.project_data:
                         memory.project_data["beat"] = {}
                     memory.project_data["beat"].update({
-                        "url": f"/media/{user_id}/{session_id}/beat.mp3",
+                        "url": beat_url,
                         "meta": {
                             "bpm": bpm or 120,
                             "mood": mood,
@@ -403,8 +395,8 @@ class BeatService:
                 
                 return {
                     "session_id": session_id,
-                    "url": f"/media/{user_id}/{session_id}/beat.mp3",
-                    "beat_url": f"/media/{user_id}/{session_id}/beat.mp3",
+                    "url": beat_url,
+                    "beat_url": beat_url,
                     "status": "ready",
                     "provider": "silent_fallback",
                     "progress": 100

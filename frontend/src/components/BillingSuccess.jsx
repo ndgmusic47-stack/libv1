@@ -1,21 +1,15 @@
 import { motion } from 'framer-motion';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 export default function BillingSuccess() {
-  const { refreshUser } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function run() {
-      await refreshUser();   // Update GLOBAL user state
-      setTimeout(() => {
-        navigate('/app');       // Redirect AFTER state is updated
-      }, 300);
-    }
-    run();
-  }, [navigate, refreshUser]);
+    setTimeout(() => {
+      navigate('/app');
+    }, 300);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-studio-dark flex items-center justify-center p-4">

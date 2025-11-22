@@ -17,7 +17,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Constants
-MEDIA_DIR = Path("./media")
+from config.settings import MEDIA_DIR
 
 
 class LyricsService:
@@ -159,7 +159,6 @@ Standing tall, I claim my name"""
     
     async def write_song(
         self,
-        user_id: str,
         session_id: str,
         genre: str,
         mood: str,
@@ -172,7 +171,7 @@ Standing tall, I claim my name"""
         Returns:
             Dict with lyrics, filename, path, project_path, session_id, timestamp
         """
-        session_path = get_session_media_path(session_id, user_id)
+        session_path = get_session_media_path(session_id)
         
         # Static fallback lyrics
         fallback_lyrics = f"""[Verse 1]
@@ -261,8 +260,8 @@ Make it authentic and emotionally resonant."""
         # which is a main.py function. We'll handle it there.
         
         # Update project memory
-        memory = await get_or_create_project_memory(session_id, MEDIA_DIR)
-        await memory.add_asset("lyrics", f"/media/{user_id}/{session_id}/lyrics.txt", {"genre": genre, "mood": mood})
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
+        await memory.add_asset("lyrics", f"/media/{session_id}/lyrics.txt", {"genre": genre, "mood": mood})
         await memory.advance_stage("lyrics", "upload")
         
         log_endpoint_event("/songs/write", session_id, "success", {"provider": provider})
@@ -278,7 +277,6 @@ Make it authentic and emotionally resonant."""
     
     async def generate_lyrics_from_beat(
         self,
-        user_id: str,
         session_id: str,
         beat_file_path: Path
     ) -> Dict[str, Any]:
@@ -288,7 +286,7 @@ Make it authentic and emotionally resonant."""
         Returns:
             Dict with lyrics, filename, path, project_path, session_id, bpm, mood, timestamp
         """
-        session_path = get_session_media_path(session_id, user_id)
+        session_path = get_session_media_path(session_id)
         
         # Detect BPM and analyze mood
         bpm = self.detect_bpm(beat_file_path)
@@ -327,7 +325,7 @@ Make it authentic and emotionally resonant."""
                 json.dump(project, f, indent=2)
         
         # Auto-save to project memory
-        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
         if "lyrics" not in memory.project_data:
             memory.project_data["lyrics"] = {}
         memory.project_data["lyrics"].update({

@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 # Constants
-MEDIA_DIR = Path("./media")
+from config.settings import MEDIA_DIR
 
 
 class AnalyticsService:

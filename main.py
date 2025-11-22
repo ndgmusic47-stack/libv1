@@ -11,22 +11,19 @@ from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # Import routers
 from content import content_router
-from auth import auth_router
 from routers.billing_router import billing_router
 from routers.beat_router import beat_router
 from routers.lyrics_router import lyrics_router
 from routers.media_router import media_router
+from routers.mix_router import mix_router
 from routers.release_router import release_router
 from routers.analytics_router import analytics_router
 from routers.social_router import social_router
-from routers.google_auth_router import google_auth_router
-from admin_tools import admin_router
 from utils.rate_limit import RateLimiterMiddleware
 from database import init_db
 from config import settings
@@ -57,65 +54,10 @@ from backend.utils.responses import success_response, error_response
 
 app = FastAPI(title="Label in a Box v4 - Phase 2.2")
 
-# Default session secret key (fallback if SESSION_SECRET_KEY not set)
-DEFAULT_SESSION_SECRET = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
-
 # Enforce HTTPS in production (Render)
 def _is_render_env() -> bool:
     """Check if running in Render.com environment"""
     return bool(settings.render or settings.render_external_url or settings.render_service_name)
-
-# Diagnostic middleware for Google OAuth cookie tracking
-class CookieDiagnosticMiddleware(BaseHTTPMiddleware):
-    """Logs cookie presence at middleware layer for OAuth debugging"""
-    async def dispatch(self, request, call_next):
-        # Only log for Google auth endpoints to reduce noise
-        if "/api/auth/google" in str(request.url.path):
-            logger.error("=" * 80)
-            logger.error("COOKIE DIAGNOSTIC MIDDLEWARE - REQUEST")
-            logger.error("=" * 80)
-            logger.error(f"Path: {request.url.path}")
-            logger.error(f"Method: {request.method}")
-            logger.error(f"Cookies in request.cookies: {dict(request.cookies)}")
-            logger.error(f"Cookie header (raw): {request.headers.get('cookie', 'NOT FOUND')[:300]}")
-            logger.error(f"Session cookie present: {'session' in request.cookies}")
-            logger.error(f"Request has 'session' attribute: {hasattr(request, 'session')}")
-            if hasattr(request, 'session'):
-                try:
-                    session_dict = dict(request.session) if hasattr(request.session, '__iter__') else {}
-                    logger.error(f"Session contents: {session_dict}")
-                except Exception as e:
-                    logger.error(f"Could not read session: {e}")
-            logger.error(f"x-forwarded-proto: {request.headers.get('x-forwarded-proto', 'NOT SET')}")
-            logger.error("=" * 80)
-        
-        response = await call_next(request)
-        
-        # Log response Set-Cookie headers
-        if "/api/auth/google" in str(request.url.path):
-            set_cookie_headers = response.headers.getlist("set-cookie") if hasattr(response.headers, 'getlist') else []
-            if not set_cookie_headers:
-                set_cookie_raw = response.headers.get("set-cookie", "")
-                if set_cookie_raw:
-                    set_cookie_headers = [set_cookie_raw]
-            
-            logger.error("=" * 80)
-            logger.error("COOKIE DIAGNOSTIC MIDDLEWARE - RESPONSE")
-            logger.error("=" * 80)
-            logger.error(f"Path: {request.url.path}")
-            logger.error(f"Status: {response.status_code}")
-            if set_cookie_headers:
-                logger.error(f"✅ Set-Cookie headers found: {len(set_cookie_headers)}")
-                for cookie in set_cookie_headers:
-                    if "session" in cookie.lower():
-                        logger.error(f"  ✅ Session cookie in Set-Cookie: {cookie[:200]}...")
-                    else:
-                        logger.error(f"  Other cookie: {cookie[:200]}...")
-            else:
-                logger.error(f"❌ NO Set-Cookie headers in response!")
-            logger.error("=" * 80)
-        
-        return response
 
 # Uncaught exception middleware - logs all unhandled exceptions and returns 500
 class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
@@ -128,58 +70,6 @@ class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
                 status_code=500,
                 content={"ok": False, "error": "Internal Server Error"}
             )
-
-# HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
-# This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
-class HTTPSFixMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        # Only modify HTTP requests
-        if request.scope["type"] == "http":
-            # Render forwards HTTPS → http internally, so we must correct it
-            proto = request.headers.get("x-forwarded-proto", "")
-            if proto.lower() == "https":
-                request.scope["scheme"] = "https"
-        
-        return await call_next(request)
-
-class RedirectCookieMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-
-        # If this is a redirect response (302/303/307) AND the session contains data,
-        # Starlette sessions do NOT support `.modified`
-        # Use a manual force-write flag instead
-        if response.status_code in (302, 303, 307):
-            if hasattr(request, "session") and request.session:
-                request.session["_force_write"] = True
-
-        return response
-
-# Add diagnostic middleware FIRST (outermost) to track cookies through all layers
-app.add_middleware(CookieDiagnosticMiddleware)
-app.add_middleware(UncaughtExceptionMiddleware)
-
-# HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
-# This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
-app.add_middleware(HTTPSFixMiddleware)
-
-# RedirectCookieMiddleware - Must be BEFORE SessionMiddleware
-# Ensures session cookie is written during OAuth redirects
-app.add_middleware(RedirectCookieMiddleware)
-
-# Session middleware for Google SSO flow
-# NOTE: Must be added BEFORE routers to ensure session is available in route handlers
-# CRITICAL: same_site='none' REQUIRES secure=True (https_only=True) for cross-domain cookies
-# This is necessary for Google OAuth redirects from accounts.google.com
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
-    session_cookie="session",
-    max_age=60 * 60 * 24 * 7,   # 7 days
-    same_site="none",          # correct Starlette param
-    https_only=True            # required for secure cookies
-)
-
 
 # Phase 1: Required API keys for startup validation
 REQUIRED_KEYS = [
@@ -196,34 +86,6 @@ REQUIRED_KEY_MAP = {
     "BUFFER_TOKEN": settings.buffer_token,
     "DISTROKID_KEY": settings.distrokid_key,
 }
-
-# CORS middleware (Phase 1 hardening)
-allowed_origins = []
-if settings.frontend_url:
-    allowed_origins = [settings.frontend_url]
-else:
-    allowed_origins = ["*"]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["X-Total-Count"],
-)
-# Rate limiting middleware (Phase 1)
-app.add_middleware(RateLimiterMiddleware, requests_per_minute=30)
-
-class EnforceHTTPSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        if _is_render_env():
-            proto = request.headers.get("x-forwarded-proto", "")
-            if proto and proto.lower() != "https":
-                return error_response("HTTPS required", status_code=403)
-        return await call_next(request)
-
-app.add_middleware(EnforceHTTPSMiddleware)
 
 # Security headers middleware
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -258,7 +120,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         
         return response
 
+app.add_middleware(UncaughtExceptionMiddleware)
+app.add_middleware(RateLimiterMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS MUST be near the bottom
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.FRONTEND_URL],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Directory setup
 MEDIA_DIR = Path("./media")
@@ -327,17 +200,15 @@ async def initialize_database():
 # ============================================================================
 # INCLUDE ROUTERS
 # ============================================================================
-app.include_router(auth_router)
-app.include_router(google_auth_router)
 app.include_router(content_router)
 app.include_router(billing_router)
 app.include_router(beat_router)
 app.include_router(lyrics_router)
 app.include_router(media_router)
+app.include_router(mix_router)
 app.include_router(release_router)
 app.include_router(analytics_router)
 app.include_router(social_router)
-app.include_router(admin_router)
 
 # ============================================================================
 # FRONTEND SERVING (MUST BE LAST - AFTER ALL API ROUTES)

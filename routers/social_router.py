@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from auth import get_current_user
 from services.social_service import SocialService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import get_session_media_path, log_endpoint_event
@@ -47,14 +46,14 @@ async def get_social_platforms():
 
 
 @social_router.post("/posts")
-async def create_social_post(request: SocialPostRequest, current_user: dict = Depends(get_current_user)):
+async def create_social_post(request: SocialPostRequest):
     """Schedule a social post using GetLate.dev API or local JSON fallback"""
     try:
-        session_path = get_session_media_path(request.session_id, current_user["user_id"])
+        session_path = get_session_media_path(request.session_id, None)
         
         result = await social_service.create_social_post(
             session_id=request.session_id,
-            user_id=current_user["user_id"],
+            user_id=None,
             session_path=session_path,
             platform=request.platform,
             when_iso=request.when_iso,
@@ -89,7 +88,7 @@ async def create_social_post(request: SocialPostRequest, current_user: dict = De
 
 
 @social_router.post("/project/navigate")
-async def navigate_project_stage(request: ProjectNavigationRequest, current_user: dict = Depends(get_current_user)):
+async def navigate_project_stage(request: ProjectNavigationRequest):
     """
     Navigate project to a specific workflow stage (Skip Forward/Back functionality).
     
@@ -101,7 +100,7 @@ async def navigate_project_stage(request: ProjectNavigationRequest, current_user
         project_memory = await get_or_create_project_memory(
             session_id=request.session_id,
             media_dir=media_dir,
-            user_id=current_user["user_id"]
+            user_id=None
         )
         
         # Jump to target stage

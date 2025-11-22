@@ -4,12 +4,14 @@ Mix service for audio processing and mixing
 import logging
 import asyncio
 from pathlib import Path
+from typing import Optional
 from pydub import AudioSegment
 from pydub.effects import normalize
 from pydub.exceptions import CouldntDecodeError
 
 from project_memory import get_or_create_project_memory
 from backend.utils.responses import error_response, success_response
+from config.settings import MEDIA_DIR
 
 
 def apply_basic_mix(vocal_path: str, beat_path: str, output_path: str):
@@ -33,13 +35,13 @@ class MixService:
     """Service for handling audio mixing operations"""
     
     @staticmethod
-    async def run_clean_mix(request, user_id: str) -> dict:
+    async def run_clean_mix(request, project_id: Optional[str] = None) -> dict:
         """
         Clean mix: overlay vocal on beat using pydub
         
         Args:
             request: CleanMixRequest object with vocal_url, beat_url, session_id, etc.
-            user_id: User ID for project memory updates
+            project_id: Project ID (session_id) for project memory updates
             
         Returns:
             Success or error response dict
@@ -47,6 +49,8 @@ class MixService:
         logger.info("Running clean mix…")
         
         try:
+            project_id = project_id or request.session_id
+            
             # Resolve file paths (handle both /media/... and ./media/... paths)
             vocal_path = request.vocal_url
             if vocal_path.startswith("/media/"):
@@ -94,17 +98,17 @@ class MixService:
             mixed = normalize(mixed)
             
             # Save output
-            session_dir = Path(f"./media/{user_id}/{request.session_id}")
+            session_dir = Path(f"./media/{project_id}")
             session_dir.mkdir(parents=True, exist_ok=True)
-            output_path = session_dir / "mixed_output.wav"
+            output_path = session_dir / "mix" / "mixed_output.wav"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(mixed.export, output_path, format="wav")
             
             # Return JSON
-            mix_url = f"/sessions/{request.session_id}/mixed_output.wav"
+            mix_url = f"/media/{project_id}/mix/mixed_output.wav"
             
             # Update project memory
-            MEDIA_DIR = Path("./media")
-            memory = await get_or_create_project_memory(request.session_id, MEDIA_DIR, user_id)
+            memory = await get_or_create_project_memory(project_id, MEDIA_DIR, None)
             if "mix" not in memory.project_data:
                 memory.project_data["mix"] = {}
             memory.project_data["mix"].update({
@@ -129,23 +133,27 @@ class MixService:
             return error_response("UNEXPECTED_ERROR", 500, f"Failed to create clean mix: {str(e)}")
     
     @staticmethod
-    async def mix_audio(user_id: str, session_id: str) -> dict:
+    async def mix_audio(project_id: str, data) -> dict:
         """
         Basic mix using apply_basic_mix function
         
         Args:
-            user_id: User ID
-            session_id: Session ID
+            project_id: Project ID (session_id)
+            data: MixRequest object with optional vocal_url, beat_url
             
         Returns:
             Success response dict with mix_url
         """
-        # compute paths
-        base = Path(f"./media/{user_id}/{session_id}")
+        # Use project_id as session_id
+        session_id = project_id
+        
+        # compute paths (anonymous, no user_id)
+        base = Path(f"./media/{session_id}")
 
         vocal_path = base / "vocal.wav"
         beat_path = base / "beat.mp3"
         output_path = base / "mix" / "mix.wav"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # run DSP chain
         await asyncio.to_thread(
@@ -156,9 +164,8 @@ class MixService:
         )
 
         # update project.json
-        result_url = f"/media/{user_id}/{session_id}/mix/mix.wav"
-        MEDIA_DIR = Path("./media")
-        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+        result_url = f"/media/{session_id}/mix/mix.wav"
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
         if "mix" not in memory.project_data:
             memory.project_data["mix"] = {}
         memory.project_data["mix"].update({
@@ -173,21 +180,19 @@ class MixService:
         )
     
     @staticmethod
-    async def get_mix_status(user_id: str, session_id: str) -> dict:
+    async def get_mix_status(project_id: str) -> dict:
         """
-        Get the current mix status and file URL for a session.
+        Get the current mix status and file URL for a project.
         
         Args:
-            user_id: User ID
-            session_id: Session ID
+            project_id: Project ID (session_id)
             
         Returns:
             Dict with status and mix_url (if available)
         """
         try:
             # Load project data from memory
-            MEDIA_DIR = Path("./media")
-            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id)
+            memory = await get_or_create_project_memory(project_id, MEDIA_DIR, None)
             mix_stage = memory.project_data.get("mix")
             
             # Check for mix URL in stage data
@@ -206,7 +211,7 @@ class MixService:
                     elif mix_url.startswith("./"):
                         file_path = Path(mix_url)
                     else:
-                        file_path = Path(f"./media/{user_id}/{session_id}/mix/{mix_url}")
+                        file_path = Path(f"./media/{project_id}/mix/{mix_url}")
                     
                     # Check if file exists
                     file_exists = await asyncio.to_thread(file_path.exists)

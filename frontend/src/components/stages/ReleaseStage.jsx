@@ -1,19 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
-import { handlePaywall, checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
-  const access = checkUserAccess(user);
-  const allowed = access.allowed;
-  const message = access.reason || "Upgrade to continue using this feature.";
-
-  useEffect(() => {
-    // Recalculate billing on user change
-    const a = checkUserAccess(user);
-    // No state required — simply triggers rerender
-  }, [user]);
+export default function ReleaseStage({ openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
+  const allowed = true; // No auth - always allowed
 
   // Form inputs
   const [trackTitle, setTrackTitle] = useState(sessionData.trackTitle || sessionData.metadata?.track_title || '');
@@ -125,10 +116,6 @@ export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, se
   };
 
   const handleGenerateCover = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -164,10 +151,6 @@ export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, se
   };
 
   const handleGenerateCopy = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -196,10 +179,6 @@ export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, se
   };
 
   const handleGenerateMetadata = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -238,10 +217,6 @@ export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, se
   };
 
   const handleGenerateLyricsPDF = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -280,10 +255,6 @@ export default function ReleaseStage({ user, openUpgradeModal, openAuthModal, se
   };
 
   const handleDownloadAll = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;

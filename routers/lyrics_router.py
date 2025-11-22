@@ -7,7 +7,6 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 from pathlib import Path
 
-from auth import get_current_user
 from services.lyrics_service import LyricsService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
@@ -40,15 +39,13 @@ lyrics_service = LyricsService()
 
 @lyrics_router.post("/songs/write")
 async def write_song(
-    request: SongRequest,
-    current_user: dict = Depends(get_current_user)
+    request: SongRequest
 ):
     """Phase 2.2: Generate song lyrics using OpenAI with fallback"""
     session_id = request.session_id if request.session_id else str(uuid.uuid4())
     
     try:
         result = await lyrics_service.write_song(
-            user_id=current_user["user_id"],
             session_id=session_id,
             genre=request.genre,
             mood=request.mood,
@@ -59,8 +56,8 @@ async def write_song(
         # Generate voice MP3 for lyrics using gTTS (first 200 chars to avoid too long)
         voice_url = None
         try:
-            # Import at runtime to avoid circular import
-            from main import gtts_speak
+            # Import from shared utilities
+            from utils.shared_utils import gtts_speak
             
             try:
                 # Parse lyrics to get first verse
@@ -97,7 +94,7 @@ async def write_song(
                     voice_text = voice_text[:200] + "..."
                 
                 # Generate voice using default persona "nova"
-                voice_result = gtts_speak("nova", voice_text, session_id, current_user["user_id"])
+                voice_result = gtts_speak("nova", voice_text, session_id, None)
                 if isinstance(voice_result, dict) and voice_result.get("ok"):
                     voice_url = voice_result.get("data", {}).get("url")
                     import logging
@@ -126,12 +123,11 @@ async def write_song(
 @lyrics_router.post("/lyrics/from_beat")
 async def generate_lyrics_from_beat(
     file: UploadFile = File(...),
-    session_id: Optional[str] = Form(None),
-    current_user: dict = Depends(get_current_user)
+    session_id: Optional[str] = Form(None)
 ):
     """V17: Generate NP22-style lyrics from uploaded beat file"""
     session_id = session_id if session_id else str(uuid.uuid4())
-    session_path = Path("./media") / current_user["user_id"] / session_id
+    session_path = Path("./media") / session_id
     session_path.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -142,7 +138,6 @@ async def generate_lyrics_from_beat(
             f.write(content)
         
         result = await lyrics_service.generate_lyrics_from_beat(
-            user_id=current_user["user_id"],
             session_id=session_id,
             beat_file_path=temp_file
         )

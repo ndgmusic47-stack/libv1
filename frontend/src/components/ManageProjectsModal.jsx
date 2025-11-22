@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../utils/api';
-import { useAuth } from '../context/AuthContext';
 
 export default function ManageProjectsModal({ isOpen, onClose, onLoadProject }) {
-  const { user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,10 +10,10 @@ export default function ManageProjectsModal({ isOpen, onClose, onLoadProject }) 
   const [newName, setNewName] = useState('');
 
   useEffect(() => {
-    if (isOpen && user) {
+    if (isOpen) {
       loadProjects();
     }
-  }, [isOpen, user]);
+  }, [isOpen]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -49,7 +47,7 @@ export default function ManageProjectsModal({ isOpen, onClose, onLoadProject }) 
         voice_prompts: []
       };
       
-      await api.saveProject(user.user_id, null, emptyProjectData);
+      await api.saveProject(null, null, emptyProjectData);
       await loadProjects();
     } catch (err) {
       setError(err.message || 'Failed to create project');
@@ -78,7 +76,7 @@ export default function ManageProjectsModal({ isOpen, onClose, onLoadProject }) 
       result.projectData.metadata = result.projectData.metadata || {};
       result.projectData.metadata.track_title = newName.trim();
       
-      await api.saveProject(user.user_id, projectId, result.projectData);
+      await api.saveProject(null, projectId, result.projectData);
       setRenamingId(null);
       setNewName('');
       await loadProjects();

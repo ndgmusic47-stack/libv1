@@ -13,8 +13,6 @@ from gtts import gTTS
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.utils.responses import success_response, error_response
-from services.trial_service import TrialService
-from crud.user import UserRepository
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -109,63 +107,33 @@ async def get_cached(key: str, fallback_func: Callable[[], Awaitable[Any]], ttl_
 
 async def require_feature_pro(current_user: dict, feature: str, endpoint: str, db: AsyncSession):
     """
-    Feature gate: block free users from specific features, but allow trial users.
+    Feature gate: REMOVED - Always allows access (no paywall enforcement).
+    Kept for backward compatibility but always returns None (allows access).
     
-    Checks if user is a paid user first. If not, checks if trial is active.
-    Only denies access if user is not paid AND trial is expired.
-
-    - current_user: dict from get_current_user()
-    - feature: short feature key, e.g. "upload", "mix", "release_pack"
-    - endpoint: endpoint path string for logging
-    - db: AsyncSession for database operations
+    - current_user: dict (ignored)
+    - feature: short feature key, e.g. "upload", "mix", "release_pack" (ignored)
+    - endpoint: endpoint path string for logging (ignored)
+    - db: AsyncSession for database operations (ignored)
     """
-    user_id = current_user.get("user_id")
-    plan = current_user.get("plan", "free")
-    is_paid_user = current_user.get("is_paid_user", False)
-
-    # Paid users always pass
-    if is_paid_user:
-        return None
-
-    # If user is not paid, check if trial is active
-    # Initialize repository and trial service
-    user_repo = UserRepository(db)
-    trial_service = TrialService(db, user_repo)
-    
-    # Get the full User object to check trial status
-    try:
-        user_id_int = int(user_id)
-        user = await user_repo.get_user_by_id(user_id_int)
-        
-        if user:
-            # Check if trial is active
-            if trial_service.is_trial_active(user):
-                # Trial is active, allow access
-                return None
-    except (ValueError, TypeError, Exception) as e:
-        # If we can't get user or check trial, deny access
-        logger.warning(f"Failed to check trial status for user {user_id}: {e}")
-
-    # Trial is inactive or user not found - deny access
-    log_endpoint_event(
-        endpoint,
-        None,
-        "upgrade_required",
-        {"user_id": user_id, "feature": feature, "plan": plan},
-    )
-    return error_response(
-        "upgrade_required",
-        status_code=403,
-        data={"feature": feature, "plan": plan},
-    )
+    # Always allow access - no paywall enforcement
+    return None
 
 
-def get_session_media_path(session_id: str, user_id: str) -> Path:
+def get_session_media_path(session_id: str, user_id: Optional[str] = None) -> Path:
     """
-    Phase 8B:
-    User-scoped media path. No backward compatibility.
+    Get session media path (anonymous, no user_id required).
+    user_id parameter kept for backward compatibility but ignored.
     """
-    path = Path("./media") / user_id / session_id
+    path = Path("./media") / session_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_project_media_path(project_id: str) -> Path:
+    """
+    Get project media path.
+    """
+    path = Path("./media") / project_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -196,7 +164,7 @@ def should_speak(persona: str, text: str) -> bool:
 
 
 def gtts_speak(persona: str, text: str, session_id: Optional[str] = None, user_id: Optional[str] = None):
-    """Phase 2.2: Generate speech using gTTS with SHA256 cache and 10s debounce"""
+    """Phase 2.2: Generate speech using gTTS with SHA256 cache and 10s debounce (anonymous, no user_id required)"""
     # Generate session_id if not provided
     if not session_id:
         session_id = str(uuid.uuid4())
@@ -204,9 +172,7 @@ def gtts_speak(persona: str, text: str, session_id: Optional[str] = None, user_i
     # Generate SHA256 cache key (Phase 2.2 requirement)
     cache_key = hashlib.sha256(f"{persona}:{text}".encode()).hexdigest()
     
-    # Create voices directory
-    if not user_id:
-        raise ValueError("user_id is required for gtts_speak")
+    # Create voices directory (anonymous, no user_id required)
     voices_dir = get_session_media_path(session_id, user_id) / "voices"
     voices_dir.mkdir(exist_ok=True, parents=True)
     
@@ -229,8 +195,8 @@ def gtts_speak(persona: str, text: str, session_id: Optional[str] = None, user_i
             tts.save(str(output_file))
         
         # Return URL whether debounced or not (spec requires playable asset)
-        # Construct URL path relative to media directory
-        url_path = f"/media/{user_id}/{session_id}/voices/{cache_key}.mp3"
+        # Construct URL path relative to media directory (anonymous)
+        url_path = f"/media/{session_id}/voices/{cache_key}.mp3"
         log_endpoint_event("/voices/say", session_id, "success", {"persona": persona, "cached": is_debounced})
         return success_response(
             data={

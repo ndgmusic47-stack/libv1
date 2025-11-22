@@ -17,9 +17,6 @@ gtts
 python-dotenv
 aubio
 reportlab
-PyJWT
-passlib
-argon2-cffi
 stripe
 sqlalchemy
 aiosqlite
@@ -28,6 +25,3 @@ pytest-asyncio
 httpx
 aiofiles
 redis
-authlib
-itsdangerous
-starlette-session

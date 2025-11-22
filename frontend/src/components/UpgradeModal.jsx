@@ -1,5 +1,4 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
 export default function UpgradeModal({ 
@@ -11,8 +10,7 @@ export default function UpgradeModal({
   trial_active,
   trial_days_remaining
 }) {
-  const { user: contextUser } = useAuth();
-  const user = propUser || contextUser;
+  const user = propUser || null;
   if (!isOpen) return null;
 
   const getFeatureMessage = () => {

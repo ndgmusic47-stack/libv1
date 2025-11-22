@@ -24,9 +24,11 @@ logger = logging.getLogger(__name__)
 content_router = APIRouter(prefix="/api/content", tags=["content"])
 
 # Helper functions
+from config.settings import MEDIA_DIR
+
 def get_session_media_path(session_id: str) -> Path:
     """Get media path for session"""
-    path = Path("./media") / session_id
+    path = MEDIA_DIR / session_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 

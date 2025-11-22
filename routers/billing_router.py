@@ -6,14 +6,13 @@ Webhook is defined FIRST to avoid middleware conflicts
 import os
 import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, Body, Header
+from typing import Optional
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import stripe
 
 from database import get_db
-from crud.user import UserRepository
 from services.billing_service import BillingService
-from auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -98,9 +97,8 @@ async def stripe_webhook(
                 content={"ok": False, "received": True, "error": "Invalid payload format"}
             )
         
-        # Initialize service with dependency injection
-        user_repo = UserRepository(db)
-        billing_service = BillingService(db, user_repo)
+        # Initialize billing service without user repository (decoupled from auth)
+        billing_service = BillingService(db)
         
         # Process the verified webhook event
         success = await billing_service.process_webhook(event)
@@ -126,14 +124,15 @@ async def stripe_webhook(
 
 @billing_router.post("/create-checkout-session")
 async def create_checkout_session(
-    user_data: dict = Depends(get_current_user),
+    email: Optional[str] = Body(default=None),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a Stripe Checkout session for the current user.
+    Create a Stripe Checkout session (decoupled from auth).
+    Uses anonymous customer if no email provided.
     
     Args:
-        user_data: Current user data from get_current_user dependency
+        email: Optional email address for Stripe customer creation
         db: Database session dependency
         
     Returns:
@@ -146,22 +145,11 @@ async def create_checkout_session(
                 detail="Stripe is not configured"
             )
         
-        # Get user from database
-        user_repo = UserRepository(db)
-        user_id = int(user_data["user_id"])
-        user = await user_repo.get_user_by_id(user_id)
+        # Create billing service (decoupled from auth)
+        billing_service = BillingService(db)
         
-        if not user:
-            raise HTTPException(
-                status_code=404,
-                detail="User not found"
-            )
-        
-        # Create billing service
-        billing_service = BillingService(db, user_repo)
-        
-        # Create checkout session
-        checkout_url = await billing_service.create_checkout_session(user)
+        # Create checkout session with email
+        checkout_url = await billing_service.create_checkout_session(email)
         
         if not checkout_url:
             raise HTTPException(
@@ -189,14 +177,14 @@ async def create_checkout_session(
 
 @billing_router.post("/portal")
 async def create_billing_portal_session(
-    user_data: dict = Depends(get_current_user),
+    stripe_customer_id: str = Body(...),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a Stripe Billing Portal session for the current user.
+    Create a Stripe Billing Portal session (decoupled from auth).
     
     Args:
-        user_data: Current user data from get_current_user dependency
+        stripe_customer_id: Stripe customer ID
         db: Database session dependency
         
     Returns:
@@ -209,27 +197,22 @@ async def create_billing_portal_session(
                 detail="Stripe is not configured"
             )
         
-        # Get user from database
-        user_repo = UserRepository(db)
-        user_id = int(user_data["user_id"])
-        user = await user_repo.get_user_by_id(user_id)
-        
-        if not user:
+        if not stripe_customer_id:
             raise HTTPException(
-                status_code=404,
-                detail="User not found"
+                status_code=400,
+                detail="Stripe customer ID is required"
             )
         
-        # Create billing service
-        billing_service = BillingService(db, user_repo)
+        # Create billing service (decoupled from auth)
+        billing_service = BillingService(db)
         
         # Create portal session
-        portal_url = await billing_service.create_billing_portal_session(user)
+        portal_url = await billing_service.create_billing_portal_session(stripe_customer_id)
         
         if not portal_url:
             raise HTTPException(
                 status_code=500,
-                detail="Failed to create billing portal session. User may not have a Stripe customer ID."
+                detail="Failed to create billing portal session. Invalid Stripe customer ID."
             )
         
         return JSONResponse(

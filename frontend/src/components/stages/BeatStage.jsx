@@ -1,20 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
-import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function BeatStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
-  const access = checkUserAccess(user);
-  const allowed = access.allowed;
-  const message = access.reason || "Upgrade to continue using this feature.";
-
-  useEffect(() => {
-    // Recalculate billing on user change
-    const a = checkUserAccess(user);
-    // No state required — simply triggers rerender
-  }, [user]);
+export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
 
   const [mood, setMood] = useState(sessionData.mood || 'energetic');
   const [promptText, setPromptText] = useState('');
@@ -55,15 +45,6 @@ export default function BeatStage({ user, openUpgradeModal, openAuthModal, sessi
   };
 
   const handleCreate = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
-    if (!allowed) {
-      openUpgradeModal();
-      return;
-    }
-
     setShowModal(false);
     setIsGenerating(true);
     setLoading(true);
@@ -148,14 +129,6 @@ export default function BeatStage({ user, openUpgradeModal, openAuthModal, sessi
       onVoiceCommand={handleVoiceCommand}
     >
       <div className="w-full h-full flex flex-col items-center justify-start p-6 md:p-10">
-        {!allowed && (
-          <div className="upgrade-banner">
-            <p className="text-center text-red-400 font-semibold">
-              {message}
-            </p>
-          </div>
-        )}
-
         <div className="icon-wrapper text-6xl mb-4">
           🎵
         </div>

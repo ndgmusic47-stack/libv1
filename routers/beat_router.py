@@ -7,7 +7,6 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import get_current_user
 from database import get_db
 from services.beat_service import BeatService
 from backend.utils.responses import success_response, error_response
@@ -36,7 +35,6 @@ beat_service = BeatService()
 @beat_router.post("/create")
 async def create_beat(
     request: Optional[BeatRequest] = Body(default=None),
-    current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Phase 2.2: Generate beat using Beatoven API with fallback to demo beat - NEVER returns 422"""
@@ -64,7 +62,6 @@ async def create_beat(
     
     try:
         result = await beat_service.create_beat_track(
-            user_id=current_user["user_id"],
             session_id=session_id,
             prompt=prompt,
             mood=mood,

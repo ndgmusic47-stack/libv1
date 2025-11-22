@@ -1,20 +1,13 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
 export default function PricingPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const handleUpgrade = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
     try {
-      const res = await api.createCheckoutSession(user.user_id);
+      const res = await api.createCheckoutSession();
       if (res && res.url) {
         window.location.href = res.url;
       } else {

@@ -14,7 +14,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Constants
-MEDIA_DIR = Path("./media")
+from config.settings import MEDIA_DIR
 
 
 class SocialService:

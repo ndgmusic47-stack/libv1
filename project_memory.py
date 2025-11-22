@@ -30,14 +30,11 @@ class ProjectMemory:
     
     def __init__(self, session_id: str, media_dir: Path, user_id: Optional[str] = None, db: Optional[AsyncSession] = None):
         self.session_id = session_id
-        self.user_id = user_id
+        self.user_id = user_id  # Kept for backward compatibility but not used
         self.media_dir = media_dir
         self.db = db
-        if user_id:
-            self.session_path = media_dir / user_id / session_id
-        else:
-            # Backward compatibility: use /media/{user_id}/{session_id}/ if no user_id
-            self.session_path = media_dir / session_id
+        # Always use /media/{session_id}/ (anonymous projects)
+        self.session_path = media_dir / session_id
         self.session_path.mkdir(parents=True, exist_ok=True)
         self.project_file = self.session_path / "project.json"
         self.project_data = None  # Will be loaded asynchronously
@@ -118,16 +115,11 @@ class ProjectMemory:
                 "files": []
             }
         }
-        if self.user_id:
-            project_data["user_id"] = self.user_id
         return project_data
     
     async def save(self):
         """Save project data to disk and update database"""
         self.project_data["updated_at"] = datetime.now().isoformat()
-        # Ensure user_id is included
-        if self.user_id:
-            self.project_data["user_id"] = self.user_id
         
         # Update database Project record if db session is available
         if self.db and self.db_project:
@@ -345,39 +337,31 @@ class ProjectMemory:
         await self.save()
         logger.info(f"Jumped to stage '{target_stage}' for session {self.session_id}")
 
-async def get_or_create_project_memory(session_id: str, media_dir: Path, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> ProjectMemory:
+async def get_or_create_project_memory(project_id: str, media_dir: Path, user_id: Optional[str] = None, db: Optional[AsyncSession] = None) -> ProjectMemory:
     """Factory function to get or create project memory and corresponding database Project record"""
-    memory = ProjectMemory(session_id, media_dir, user_id, db)
+    memory = ProjectMemory(project_id, media_dir, user_id, db)
     memory.project_data = await memory._load_or_create()
     
     # Create or find database Project record if db session is provided
-    if db and user_id:
+    if db:
         try:
-            # Convert user_id to int (it comes as string from auth)
-            try:
-                user_id_int = int(user_id)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid user_id format: {user_id}, skipping database Project creation")
-                return memory
-            
-            # Try to find existing Project by session_id
-            stmt = select(Project).where(Project.session_id == session_id)
+            # Try to find existing Project by session_id (using project_id)
+            stmt = select(Project).where(Project.session_id == project_id)
             result = await db.execute(stmt)
             db_project = result.scalar_one_or_none()
             
             if db_project is None:
-                # Create new Project record
+                # Create new Project record (anonymous, no user_id)
                 db_project = Project(
-                    user_id=user_id_int,
-                    session_id=session_id,
+                    session_id=project_id,
                     title=memory.project_data.get("metadata", {}).get("track_title") or "Untitled Project"
                 )
                 db.add(db_project)
                 await db.commit()
                 await db.refresh(db_project)
-                logger.info(f"Created database Project record for session {session_id}")
+                logger.info(f"Created database Project record for project {project_id}")
             else:
-                logger.debug(f"Found existing database Project record for session {session_id}")
+                logger.debug(f"Found existing database Project record for project {project_id}")
             
             memory.db_project = db_project
         except Exception as e:

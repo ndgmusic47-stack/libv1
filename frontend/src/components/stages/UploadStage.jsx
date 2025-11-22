@@ -1,20 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
-import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function UploadStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
-  const access = checkUserAccess(user);
-  const allowed = access.allowed;
-  const message = access.reason || "Upgrade to continue using this feature.";
-
-  useEffect(() => {
-    // Recalculate billing on user change
-    const a = checkUserAccess(user);
-    // No state required — simply triggers rerender
-  }, [user]);
+export default function UploadStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const allowed = true; // No auth - always allowed
 
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -68,10 +59,6 @@ export default function UploadStage({ user, openUpgradeModal, openAuthModal, ses
   }, [sessionId, voice]);
 
   const uploadFile = async (file) => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;

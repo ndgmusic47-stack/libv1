@@ -3,7 +3,6 @@ Analytics Router - API endpoints for analytics
 """
 from fastapi import APIRouter, Depends
 
-from auth import get_current_user
 from services.analytics_service import AnalyticsService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import get_session_media_path, log_endpoint_event
@@ -16,13 +15,13 @@ analytics_service = AnalyticsService()
 
 
 @analytics_router.get("/session/{session_id}")
-async def get_session_analytics(session_id: str, current_user: dict = Depends(get_current_user)):
+async def get_session_analytics(session_id: str):
     """Phase 2.2: Get analytics for a specific session (safe demo metrics)"""
     try:
-        session_path = get_session_media_path(session_id, current_user["user_id"])
+        session_path = get_session_media_path(session_id, None)
         analytics = await analytics_service.get_session_analytics(
             session_id=session_id,
-            user_id=current_user["user_id"],
+            user_id=None,
             session_path=session_path
         )
         

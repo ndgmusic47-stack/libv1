@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../../utils/api';
-import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
 // Copy to clipboard helper
@@ -21,16 +20,8 @@ function computeViralityScore(caption, title, hook) {
   return Math.min(score, 95);
 }
 
-export default function ContentStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
-  const access = checkUserAccess(user);
-  const allowed = access.allowed;
-  const message = access.reason || "Upgrade to continue using this feature.";
-
-  useEffect(() => {
-    // Recalculate billing on user change
-    const a = checkUserAccess(user);
-    // No state required — simply triggers rerender
-  }, [user]);
+export default function ContentStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const allowed = true; // No auth - always allowed
 
   const [activeTab, setActiveTab] = useState('social');
   const [selectedPlatform, setSelectedPlatform] = useState('tiktok');
@@ -49,10 +40,6 @@ export default function ContentStage({ user, openUpgradeModal, openAuthModal, se
 
   // V23: Step 1 - Generate Video Idea
   const handleGenerateVideoIdea = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -82,10 +69,6 @@ export default function ContentStage({ user, openUpgradeModal, openAuthModal, se
 
   // V23: Step 2 - Upload Video
   const handleVideoUpload = async (e) => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -127,10 +110,6 @@ export default function ContentStage({ user, openUpgradeModal, openAuthModal, se
 
   // V23: Step 3 - Analyze Video
   const handleAnalyzeVideo = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -165,10 +144,6 @@ export default function ContentStage({ user, openUpgradeModal, openAuthModal, se
 
   // V23: Step 4 - Generate Captions & Hashtags
   const handleGenerateTextPack = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -203,10 +178,6 @@ export default function ContentStage({ user, openUpgradeModal, openAuthModal, se
 
   // V23: Step 5 - Schedule Video (using GETLATE API via /content/schedule)
   const handleScheduleVideo = async (selectedCaption, selectedHashtags, scheduleTime, platform) => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;

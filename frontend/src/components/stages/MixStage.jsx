@@ -1,18 +1,9 @@
 import { useState, useEffect } from 'react';
 import { runCleanMix } from '../../utils/api';
-import { checkUserAccess } from '../../utils/paywall';
 import StageWrapper from './StageWrapper';
 
-export default function MixStage({ user, openUpgradeModal, openAuthModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
-  const access = checkUserAccess(user);
-  const allowed = access.allowed;
-  const message = access.reason || "Upgrade to continue using this feature.";
-
-  useEffect(() => {
-    // Recalculate billing on user change
-    const a = checkUserAccess(user);
-    // No state required — simply triggers rerender
-  }, [user]);
+export default function MixStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const allowed = true; // No auth - always allowed
 
   const [mixing, setMixing] = useState(false);
   const [mixUrl, setMixUrl] = useState(null);
@@ -35,10 +26,6 @@ export default function MixStage({ user, openUpgradeModal, openAuthModal, sessio
   }, [sessionData]);
 
   const handleMixNow = async () => {
-    if (!user) {
-      openAuthModal();
-      return;
-    }
     if (!allowed) {
       openUpgradeModal();
       return;
