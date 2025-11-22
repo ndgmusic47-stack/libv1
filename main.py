@@ -131,24 +131,24 @@ class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
 
 # HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
 # This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
-class HTTPSFixMiddleware:
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
+class HTTPSFixMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
         # Only modify HTTP requests
-        if scope["type"] == "http":
-            headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
-
+        if request.scope["type"] == "http":
             # Render forwards HTTPS → http internally, so we must correct it
-            if headers.get("x-forwarded-proto") == "https":
-                scope["scheme"] = "https"
-
-        await self.app(scope, receive, send)
+            proto = request.headers.get("x-forwarded-proto", "")
+            if proto.lower() == "https":
+                request.scope["scheme"] = "https"
+        
+        return await call_next(request)
 
 # Add diagnostic middleware FIRST (outermost) to track cookies through all layers
 app.add_middleware(CookieDiagnosticMiddleware)
 app.add_middleware(UncaughtExceptionMiddleware)
+
+# HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
+# This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
+app.add_middleware(HTTPSFixMiddleware)
 
 # Session middleware for Google SSO flow
 # NOTE: Must be added BEFORE routers to ensure session is available in route handlers
@@ -160,9 +160,6 @@ app.add_middleware(
     same_site="none",
     https_only=True,
 )
-
-# Apply HTTPSFixMiddleware BEFORE SessionMiddleware (wraps the entire app, so runs first)
-app = HTTPSFixMiddleware(app)
 
 # Log session configuration at startup for debugging
 @app.on_event("startup")
