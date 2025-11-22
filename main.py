@@ -129,6 +129,23 @@ class UncaughtExceptionMiddleware(BaseHTTPMiddleware):
                 content={"ok": False, "error": "Internal Server Error"}
             )
 
+# HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
+# This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
+class HTTPSFixMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        # Only modify HTTP requests
+        if scope["type"] == "http":
+            headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+
+            # Render forwards HTTPS → http internally, so we must correct it
+            if headers.get("x-forwarded-proto") == "https":
+                scope["scheme"] = "https"
+
+        await self.app(scope, receive, send)
+
 # Add diagnostic middleware FIRST (outermost) to track cookies through all layers
 app.add_middleware(CookieDiagnosticMiddleware)
 app.add_middleware(UncaughtExceptionMiddleware)
@@ -137,18 +154,15 @@ app.add_middleware(UncaughtExceptionMiddleware)
 # NOTE: Must be added BEFORE routers to ensure session is available in route handlers
 # CRITICAL: same_site='none' REQUIRES secure=True (https_only=True) for cross-domain cookies
 # This is necessary for Google OAuth redirects from accounts.google.com
-session_config = {
-    "secret_key": settings.session_secret_key or DEFAULT_SESSION_SECRET,
-    "max_age": None,  # Session expires when browser closes (better for OAuth state)
-    "same_site": "none",  # Required for cross-domain OAuth redirects
-    "https_only": True,  # Always True for same_site='none' (browser requirement)
-    # Note: session_cookie parameter not available in standard Starlette SessionMiddleware
-    # Cookie name defaults to "session" - this is the expected behavior
-}
 app.add_middleware(
     SessionMiddleware,
-    **session_config
+    secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
+    same_site="none",
+    https_only=True,
 )
+
+# Apply HTTPSFixMiddleware BEFORE SessionMiddleware (wraps the entire app, so runs first)
+app = HTTPSFixMiddleware(app)
 
 # Log session configuration at startup for debugging
 @app.on_event("startup")
