@@ -156,7 +156,7 @@ app.add_middleware(HTTPSFixMiddleware)
 # This is necessary for Google OAuth redirects from accounts.google.com
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.SESSION_SECRET_KEY,
+    secret_key=settings.session_secret_key or DEFAULT_SESSION_SECRET,
     session_cookie="session",
     max_age=60 * 60 * 24 * 7,   # 7 days
     same_site="none",          # correct Starlette param
