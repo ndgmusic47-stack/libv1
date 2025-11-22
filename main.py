@@ -142,6 +142,18 @@ class HTTPSFixMiddleware(BaseHTTPMiddleware):
         
         return await call_next(request)
 
+class RedirectCookieMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+
+        # If this is a redirect response (302/303/307) AND the session contains data,
+        # force the session to be marked as modified so SessionMiddleware writes the cookie.
+        if response.status_code in (302, 303, 307):
+            if hasattr(request, "session") and request.session:
+                request.session.modified = True
+
+        return response
+
 # Add diagnostic middleware FIRST (outermost) to track cookies through all layers
 app.add_middleware(CookieDiagnosticMiddleware)
 app.add_middleware(UncaughtExceptionMiddleware)
@@ -149,6 +161,10 @@ app.add_middleware(UncaughtExceptionMiddleware)
 # HTTPS Fix Middleware - Must be BEFORE SessionMiddleware
 # This ensures SessionMiddleware correctly detects HTTPS when running behind Render's HTTPS proxy
 app.add_middleware(HTTPSFixMiddleware)
+
+# RedirectCookieMiddleware - Must be BEFORE SessionMiddleware
+# Ensures session cookie is written during OAuth redirects
+app.add_middleware(RedirectCookieMiddleware)
 
 # Session middleware for Google SSO flow
 # NOTE: Must be added BEFORE routers to ensure session is available in route handlers
