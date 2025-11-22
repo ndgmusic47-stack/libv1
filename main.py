@@ -161,42 +161,6 @@ app.add_middleware(
     https_only=True,
 )
 
-# Log session configuration at startup for debugging
-@app.on_event("startup")
-async def log_session_config():
-    """Log effective session middleware configuration for debugging"""
-    import os
-    import socket
-    
-    logger.error("=" * 80)
-    logger.error("SESSION MIDDLEWARE CONFIGURATION (DEBUG)")
-    logger.error("=" * 80)
-    logger.error(f"Secret Key: {'SET' if (settings.session_secret_key or DEFAULT_SESSION_SECRET) else 'MISSING'}")
-    logger.error(f"Secret Key Length: {len(settings.session_secret_key or DEFAULT_SESSION_SECRET)}")
-    logger.error(f"Max Age: {session_config['max_age']} (None = session cookie)")
-    logger.error(f"Same Site: {session_config['same_site']}")
-    logger.error(f"HTTPS Only: {session_config['https_only']}")
-    logger.error(f"Session Cookie Name: 'session' (default, not configurable in Starlette)")
-    logger.error(f"Is Render Environment: {_is_render_env()}")
-    logger.error(f"Frontend URL: {settings.frontend_url}")
-    logger.error(f"Google Redirect URI: {settings.google_redirect_uri}")
-    
-    # Check for multiple workers (memory sessions break with multiple workers)
-    logger.error("=" * 80)
-    logger.error("WORKER CONFIGURATION CHECK:")
-    logger.error("=" * 80)
-    workers_env = os.getenv("WEB_CONCURRENCY") or os.getenv("UVICORN_WORKERS") or "Not set (defaults to 1)"
-    logger.error(f"WEB_CONCURRENCY / UVICORN_WORKERS: {workers_env}")
-    logger.error(f"⚠️  WARNING: If multiple workers are used, in-memory sessions WILL BREAK!")
-    logger.error(f"⚠️  Each worker has its own memory, so session set in worker 1 won't be accessible in worker 2")
-    logger.error(f"⚠️  Solution: Use Redis-backed sessions or ensure single worker")
-    
-    # Check hostname (helps identify if multiple instances)
-    hostname = socket.gethostname()
-    logger.error(f"Hostname: {hostname}")
-    logger.error(f"Process ID: {os.getpid()}")
-    
-    logger.error("=" * 80)
 
 # Phase 1: Required API keys for startup validation
 REQUIRED_KEYS = [
