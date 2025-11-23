@@ -29,13 +29,8 @@ export default function AppPage() {
   const [currentStage, setCurrentStage] = useState('beat');
   const [completedStages, setCompletedStages] = useState({});
   const timelineRef = useRef(null);
-  const [sessionId, setSessionId] = useState(() => {
-    const stored = localStorage.getItem('liab_session_id');
-    if (stored) return stored;
-    const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem('liab_session_id', newId);
-    return newId;
-  });
+  // sessionId is now initialized in main.jsx and stored in localStorage with key 'session_id'
+  const sessionId = localStorage.getItem('session_id') || '';
   const hasShownExpiredModal = useRef(false);
   const [sessionData, setSessionData] = useState({
     beatFile: null,
