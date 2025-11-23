@@ -9,7 +9,7 @@ from datetime import datetime
 
 from project_memory import get_or_create_project_memory
 from social_scheduler import SocialScheduler
-from config import settings
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 

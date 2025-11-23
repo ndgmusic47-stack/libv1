@@ -126,8 +126,9 @@ async def generate_lyrics_from_beat(
     session_id: Optional[str] = Form(None)
 ):
     """V17: Generate NP22-style lyrics from uploaded beat file"""
+    from config.settings import MEDIA_DIR
     session_id = session_id if session_id else str(uuid.uuid4())
-    session_path = Path("./media") / session_id
+    session_path = MEDIA_DIR / session_id
     session_path.mkdir(parents=True, exist_ok=True)
     
     try:

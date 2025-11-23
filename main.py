@@ -15,18 +15,19 @@ from starlette.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 # Import routers
-from content import content_router
+from routers.content_router import router as content_router
 from routers.billing_router import billing_router
 from routers.beat_router import beat_router
 from routers.lyrics_router import lyrics_router
 from routers.media_router import media_router
-from routers.mix_router import mix_router
+from routers.mix_router import mix_router, mix_config_router
+from routers.mix_ws_router import router as mix_ws_router
 from routers.release_router import release_router
 from routers.analytics_router import analytics_router
 from routers.social_router import social_router
 from utils.rate_limit import RateLimiterMiddleware
 from database import init_db
-from config import settings
+from config.settings import settings, MEDIA_DIR
 
 # ============================================================================
 # PHASE 2.2: SHARED UTILITIES
@@ -134,7 +135,6 @@ app.add_middleware(
 )
 
 # Directory setup
-MEDIA_DIR = Path("./media")
 ASSETS_DIR = Path("./assets")
 MEDIA_DIR.mkdir(exist_ok=True)
 ASSETS_DIR.mkdir(exist_ok=True)
@@ -206,6 +206,8 @@ app.include_router(beat_router)
 app.include_router(lyrics_router)
 app.include_router(media_router)
 app.include_router(mix_router)
+app.include_router(mix_config_router)
+app.include_router(mix_ws_router)
 app.include_router(release_router)
 app.include_router(analytics_router)
 app.include_router(social_router)

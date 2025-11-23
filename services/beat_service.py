@@ -13,7 +13,7 @@ from pydub import AudioSegment
 from project_memory import get_or_create_project_memory
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import get_session_media_path, log_endpoint_event
-from config import settings
+from config.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)

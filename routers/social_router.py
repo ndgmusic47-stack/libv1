@@ -96,10 +96,10 @@ async def navigate_project_stage(request: ProjectNavigationRequest):
     """
     try:
         # Initialize project memory
-        media_dir = Path("./media")
+        from config.settings import MEDIA_DIR
         project_memory = await get_or_create_project_memory(
             session_id=request.session_id,
-            media_dir=media_dir,
+            media_dir=MEDIA_DIR,
             user_id=None
         )
         

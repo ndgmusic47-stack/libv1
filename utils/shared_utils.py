@@ -13,7 +13,7 @@ from gtts import gTTS
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.utils.responses import success_response, error_response
-from config import settings
+from config.settings import settings, MEDIA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def get_session_media_path(session_id: str, user_id: Optional[str] = None) -> Pa
     Get session media path (anonymous, no user_id required).
     user_id parameter kept for backward compatibility but ignored.
     """
-    path = Path("./media") / session_id
+    path = MEDIA_DIR / session_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -133,7 +133,7 @@ def get_project_media_path(project_id: str) -> Path:
     """
     Get project media path.
     """
-    path = Path("./media") / project_id
+    path = MEDIA_DIR / project_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -5,7 +5,7 @@ Webhook is defined FIRST to avoid middleware conflicts
 
 import os
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException, Body, Header
+from fastapi import APIRouter, Request, Depends, Body
 from typing import Optional
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,9 +101,11 @@ async def stripe_webhook(
         billing_service = BillingService(db)
         
         # Process the verified webhook event
-        success = await billing_service.process_webhook(event)
+        result = await billing_service.process_webhook(event)
         
         # Always return 200 to Stripe (even on processing failure) to prevent retries
+        # Webhook needs special handling - always return 200 to Stripe
+        success = not result.get("is_error", True)
         return JSONResponse(
             status_code=200,
             content={
@@ -138,41 +140,12 @@ async def create_checkout_session(
     Returns:
         JSON response with checkout session URL
     """
-    try:
-        if not STRIPE_SECRET_KEY:
-            raise HTTPException(
-                status_code=500,
-                detail="Stripe is not configured"
-            )
-        
-        # Create billing service (decoupled from auth)
-        billing_service = BillingService(db)
-        
-        # Create checkout session with email
-        checkout_url = await billing_service.create_checkout_session(email)
-        
-        if not checkout_url:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create checkout session"
-            )
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "ok": True,
-                "url": checkout_url
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to create checkout session: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create checkout session: {str(e)}"
-        )
+    from backend.utils.responses import success_response, error_response
+    
+    result = await BillingService(db).create_checkout_session(email)
+    if result.get("is_error"):
+        return error_response(result.get("error", "Unknown error"))
+    return success_response(result["data"])
 
 
 @billing_router.post("/portal")
@@ -190,44 +163,9 @@ async def create_billing_portal_session(
     Returns:
         JSON response with portal session URL
     """
-    try:
-        if not STRIPE_SECRET_KEY:
-            raise HTTPException(
-                status_code=500,
-                detail="Stripe is not configured"
-            )
-        
-        if not stripe_customer_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Stripe customer ID is required"
-            )
-        
-        # Create billing service (decoupled from auth)
-        billing_service = BillingService(db)
-        
-        # Create portal session
-        portal_url = await billing_service.create_billing_portal_session(stripe_customer_id)
-        
-        if not portal_url:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create billing portal session. Invalid Stripe customer ID."
-            )
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "ok": True,
-                "url": portal_url
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to create billing portal session: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create billing portal session: {str(e)}"
-        )
+    from backend.utils.responses import success_response, error_response
+    
+    result = await BillingService(db).create_billing_portal_session(stripe_customer_id)
+    if result.get("is_error"):
+        return error_response(result.get("error", "Unknown error"))
+    return success_response(result["data"])

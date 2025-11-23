@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from typing import AsyncGenerator
 
-from config import settings
+from config.settings import settings
 
 # Default to SQLite with aiosqlite, but allow override via DATABASE_URL env var
 DATABASE_URL = settings.database_url or "sqlite+aiosqlite:///./sql_app.db"

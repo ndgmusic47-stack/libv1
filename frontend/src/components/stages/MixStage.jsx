@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { runCleanMix } from '../../utils/api';
 import StageWrapper from './StageWrapper';
+import { TransportBar } from '../Mix/TransportBar';
+import { WaveformCanvas } from '../Mix/WaveformCanvas';
+import { TimelineCursor } from '../Mix/TimelineCursor';
+import { useTransport } from '../../hooks/useTransport';
+import { useMultiTrackWaveform } from '../../hooks/useMultiTrackWaveform';
+import { useTimelineZoomPan } from '../../hooks/useTimelineZoomPan';
 
 export default function MixStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
   const allowed = true; // No auth - always allowed
@@ -8,6 +14,18 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
   const [mixing, setMixing] = useState(false);
   const [mixUrl, setMixUrl] = useState(null);
   const [error, setError] = useState(null);
+  
+  const { playheadRatio } = useTransport(sessionId);
+  const tracks = useMultiTrackWaveform(sessionId);
+  
+  const {
+    zoom,
+    offset,
+    zoomIn,
+    zoomOut,
+    panLeft,
+    panRight,
+  } = useTimelineZoomPan();
   
   // Toggle states for effects
   const [applyEq, setApplyEq] = useState(false);
@@ -145,6 +163,35 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
           >
             {mixing ? "Mixing..." : "Mix Now"}
           </button>
+
+          {/* Transport Bar */}
+          <TransportBar jobId={sessionId} />
+
+          {/* Zoom/Pan Controls */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+            <button onClick={zoomOut}>-</button>
+            <span>Zoom x{zoom}</span>
+            <button onClick={zoomIn}>+</button>
+
+            <button onClick={() => panLeft()}>◀</button>
+            <button onClick={() => panRight(tracks.master.length)}>▶</button>
+          </div>
+
+          {/* Waveform Timeline */}
+          {tracks.master.length === 0 && (
+            <div style={{ color: "#888", marginBottom: 10 }}>
+              Loading waveform…
+            </div>
+          )}
+          <div style={{ position: "relative", width: "100%", height: 200 }}>
+            <WaveformCanvas tracks={tracks} zoom={zoom} offset={offset} />
+            <TimelineCursor
+              playheadRatio={playheadRatio}
+              zoom={zoom}
+              offset={offset}
+              waveformLength={tracks.master.length}
+            />
+          </div>
 
           {/* Audio Player */}
           {mixUrl && (

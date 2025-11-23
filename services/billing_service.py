@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import stripe
 
 # Removed UserRepository and User imports - decoupled from auth
-from config import settings
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class BillingService:
         """
         self.db = db
     
-    async def create_checkout_session(self, email: Optional[str] = None) -> Optional[str]:
+    async def create_checkout_session(self, email: Optional[str] = None):
         """
         Create a Stripe Checkout session (decoupled from auth).
         Uses anonymous customer if no email provided.
@@ -49,15 +49,15 @@ class BillingService:
             email: Optional email address for Stripe customer creation
             
         Returns:
-            Checkout session URL if successful, None otherwise
+            Normalized response: {"data": url, "is_error": False} or {"error": str(e), "is_error": True}
         """
         if not STRIPE_SECRET_KEY:
             logger.error("STRIPE_SECRET_KEY is not set. Cannot create checkout session.")
-            return None
+            return {"error": "STRIPE_SECRET_KEY is not set. Cannot create checkout session.", "is_error": True}
         
         if not STRIPE_PRICE_ID:
             logger.error("STRIPE_PRICE_ID is not set. Cannot create checkout session.")
-            return None
+            return {"error": "STRIPE_PRICE_ID is not set. Cannot create checkout session.", "is_error": True}
         
         try:
             # Create anonymous Stripe customer if no email provided
@@ -99,12 +99,12 @@ class BillingService:
                 }
             )
             
-            return checkout_session.url
+            return {"data": checkout_session.url, "is_error": False}
         except Exception as e:
             logger.error(f"Failed to create checkout session: {e}", exc_info=True)
-            return None
+            return {"error": str(e), "is_error": True}
     
-    async def create_billing_portal_session(self, stripe_customer_id: str) -> Optional[str]:
+    async def create_billing_portal_session(self, stripe_customer_id: str):
         """
         Create a Stripe Billing Portal session (decoupled from auth).
         
@@ -112,15 +112,15 @@ class BillingService:
             stripe_customer_id: Stripe customer ID
             
         Returns:
-            Portal session URL if successful, None otherwise
+            Normalized response: {"data": url, "is_error": False} or {"error": str(e), "is_error": True}
         """
         if not STRIPE_SECRET_KEY:
             logger.error("STRIPE_SECRET_KEY is not set. Cannot create billing portal session.")
-            return None
+            return {"error": "STRIPE_SECRET_KEY is not set. Cannot create billing portal session.", "is_error": True}
         
         if not stripe_customer_id:
             logger.error("Stripe customer ID is required.")
-            return None
+            return {"error": "Stripe customer ID is required.", "is_error": True}
         
         try:
             # Get frontend URL from config
@@ -132,12 +132,12 @@ class BillingService:
                 return_url=f"{frontend_url}/settings"
             )
             
-            return portal_session.url
+            return {"data": portal_session.url, "is_error": False}
         except Exception as e:
             logger.error(f"Failed to create billing portal session: {e}", exc_info=True)
-            return None
+            return {"error": str(e), "is_error": True}
     
-    async def process_webhook(self, event: stripe.Event) -> bool:
+    async def process_webhook(self, event: stripe.Event):
         """
         Process a Stripe webhook event (decoupled from auth).
         Simply logs events without updating database users.
@@ -146,19 +146,16 @@ class BillingService:
             event: Verified Stripe Event object (from webhook signature verification)
             
         Returns:
-            True if processing was successful, False otherwise
+            Normalized response: {"data": True, "is_error": False} or {"error": str(e), "is_error": True}
         """
         try:
             event_type = event.type
-            event_data = event.data
-            event_object = event_data.object
-            
             logger.info(f"Processing Stripe webhook event: {event_type} (decoupled from auth)")
             
             # For now, just acknowledge receipt - webhooks work but don't update user records
             # Stripe subscription state is the source of truth
-            return True
+            return {"data": True, "is_error": False}
             
         except Exception as e:
             logger.error(f"Error processing webhook: {e}", exc_info=True)
-            return False
+            return {"error": str(e), "is_error": True}
