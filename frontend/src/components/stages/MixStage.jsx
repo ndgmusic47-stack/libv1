@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { startMix, getMixStatus, getMixPreview } from "../../utils/api";
-import { useProject } from "../context/ProjectContext";
+import { useProject } from "../../context/ProjectContext";
 import StageWrapper from './StageWrapper';
 import { TransportBar } from '../Mix/TransportBar';
 import { WaveformCanvas } from '../Mix/WaveformCanvas';
