@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { runCleanMix } from '../../utils/api';
+import { startMix, getMixStatus, getMixPreview } from "../../utils/api";
+import { useProject } from "../context/ProjectContext";
 import StageWrapper from './StageWrapper';
 import { TransportBar } from '../Mix/TransportBar';
 import { WaveformCanvas } from '../Mix/WaveformCanvas';
@@ -7,12 +8,17 @@ import { TimelineCursor } from '../Mix/TimelineCursor';
 import { useTransport } from '../../hooks/useTransport';
 import { useMultiTrackWaveform } from '../../hooks/useMultiTrackWaveform';
 import { useTimelineZoomPan } from '../../hooks/useTimelineZoomPan';
+import PreviewPlayer from '../PreviewPlayer';
 
-export default function MixStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function MixStage({ openUpgradeModal, sessionId, sessionData, voice, onClose, onNext, completeStage }) {
   const allowed = true; // No auth - always allowed
 
-  const [mixing, setMixing] = useState(false);
-  const [mixUrl, setMixUrl] = useState(null);
+  const projectId = sessionId;
+  const { projectData, updateProject } = useProject();
+
+  const [jobId, setJobId] = useState(null);
+  const [isMixing, setIsMixing] = useState(false);
+  const [mixProgress, setMixProgress] = useState(0);
   const [error, setError] = useState(null);
   
   const { playheadRatio } = useTransport(sessionId);
@@ -33,17 +39,70 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
   const [applyLimiter, setApplyLimiter] = useState(false);
   const [applySaturation, setApplySaturation] = useState(false);
 
+  // On mount: hydrate from existing mix
   useEffect(() => {
-    console.log("MixStage mounted", { sessionId, sessionData, mixUrl });
-  }, []);
+    if (!projectData) return;
 
-  useEffect(() => {
-    if (sessionData?.masterFile) {
-      setMixUrl(sessionData.masterFile);
+    // Mark MIX stage complete only if projectData.mix?.completed === true
+    if (projectData.mix?.completed === true && completeStage) {
+      setIsMixing(false);
+      // Load the preview automatically if final_output exists
+      if (projectData.mix.final_output) {
+        completeStage("mix", projectData.mix.final_output);
+      }
     }
-  }, [sessionData]);
+  }, [projectData, completeStage]);
 
-  const handleMixNow = async () => {
+  // Job polling loop
+  useEffect(() => {
+    if (!jobId) return;
+
+    let interval = setInterval(async () => {
+      try {
+        const status = await getMixStatus(projectId, jobId);
+
+        // Update progress if provided by backend
+        if (status.progress) {
+          setMixProgress(status.progress);
+        }
+
+        if (status.state === "complete") {
+          clearInterval(interval);
+
+          // fetch preview
+          const preview = await getMixPreview(projectId);
+
+          // update project memory
+          updateProject({
+            ...projectData,
+            mix: {
+              mix_url: preview.mix_url,
+              final_output: preview.mix_url,
+              completed: true
+            }
+          });
+
+          setIsMixing(false);
+          setJobId(null);
+
+          // Complete stage
+          if (completeStage) {
+            completeStage("mix", preview.mix_url);
+          }
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+        setError(`Mix status check failed: ${err.message || "Unknown error"}`);
+        clearInterval(interval);
+        setIsMixing(false);
+        setJobId(null);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [jobId, projectId, projectData, updateProject, completeStage]);
+
+  const handleMix = async () => {
     if (!allowed) {
       openUpgradeModal();
       return;
@@ -54,27 +113,17 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
       return;
     }
 
-    setMixing(true);
+    setIsMixing(true);
+    setMixProgress(0);
     setError(null);
-    
+
     try {
-      const currentSessionId = sessionId || sessionStorage.getItem("session_id");
-      const result = await runCleanMix(sessionData.vocalFile, sessionData.beatFile, currentSessionId);
-      
-      if (result?.mix_url) {
-        setMixUrl(result.mix_url);
-        updateSessionData({ masterFile: result.mix_url });
-        
-        // Complete stage
-        if (completeStage) {
-          completeStage("mix", result.mix_url);
-        }
-      }
+      const res = await startMix(projectId, {});
+      setJobId(res.job_id);
     } catch (err) {
-      console.error("Mix failed:", err);
+      console.error("Mix start failed:", err);
       setError(`Mix failed: ${err.message || "Unknown error"}`);
-    } finally {
-      setMixing(false);
+      setIsMixing(false);
     }
   };
 
@@ -87,13 +136,6 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
       voice={voice}
     >
       <div className="stage-scroll-container">
-        {!allowed && (
-          <div className="upgrade-banner">
-            <p className="text-center text-red-400 font-semibold">
-              {message}
-            </p>
-          </div>
-        )}
         <div className="flex flex-col items-center justify-center gap-8 p-6 md:p-10 max-w-2xl mx-auto">
           
           {/* Effect Toggles */}
@@ -157,11 +199,18 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
 
           {/* Mix Button */}
           <button
-            className="mix-btn w-full"
-            disabled={mixing || !sessionData?.vocalFile || !sessionData?.beatFile}
-            onClick={handleMixNow}
+            className={`mix-btn w-full transition-all duration-200 ${
+              isMixing ? "opacity-70 cursor-not-allowed" : ""
+            }`}
+            disabled={isMixing || !sessionData?.vocalFile || !sessionData?.beatFile}
+            onClick={handleMix}
           >
-            {mixing ? "Mixing..." : "Mix Now"}
+            {isMixing
+              ? (mixProgress > 0
+                  ? `Processing… ${mixProgress}%`
+                  : "Mixing…")
+              : "Mix Now"
+            }
           </button>
 
           {/* Transport Bar */}
@@ -194,14 +243,9 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, upd
           </div>
 
           {/* Audio Player */}
-          {mixUrl && (
-            <div className="w-full space-y-2">
-              <label className="block text-sm text-studio-white/60 font-montserrat">
-                Processed Audio
-              </label>
-              <audio controls src={mixUrl} style={{ width: "100%" }} />
-            </div>
-          )}
+          <div className="mt-4 w-full">
+            <PreviewPlayer />
+          </div>
         </div>
       </div>
     </StageWrapper>

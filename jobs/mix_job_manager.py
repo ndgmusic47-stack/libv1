@@ -11,6 +11,10 @@ class MixJobManager:
     async def enqueue_mix(session_id, stems, config):
         job_id = str(uuid.uuid4())
         job = MixJobState(job_id=job_id, session_id=session_id)
+        # Store config in job.extra
+        if not hasattr(job, 'extra'):
+            job.extra = {}
+        job.extra["config"] = config
         JOBS[job_id] = job
         return job_id
 

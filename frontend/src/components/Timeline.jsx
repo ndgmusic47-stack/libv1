@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, forwardRef } from 'react';
+import { useProject } from '../context/ProjectContext';
 import '../styles/Timeline.css';
 
-const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline, setProject, setCurrentStage: setCurrentStageProp, project, sessionData, openUpgradeModal }, ref) => {
+const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], onStageClick, showBackButton, onBackToTimeline }, ref) => {
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [wasAllComplete, setWasAllComplete] = useState(false);
+  const { projectData } = useProject();
   
   const stages = [
     { id: 'beat', icon: '🎵', label: 'Beat', dept: 'Echo' },
@@ -16,43 +18,22 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
     { id: 'analytics', icon: '📊', label: 'Analytics', dept: 'Pulse' }
   ];
 
-  const updateProjectStage = (stage, data) => {
-    if (setProject) {
-      setProject(prev => ({
-        ...prev,
-        stages: {
-          ...prev.stages,
-          [stage]: {
-            ...(prev.stages?.[stage] || {}),
-            ...data
-          }
-        }
-      }));
-    }
-  };
-
-  const moveToNextStage = () => {
-    if (setCurrentStageProp) {
-      setCurrentStageProp(prev => {
-        const currentIndex = stages.findIndex(s => s.id === prev);
-        if (currentIndex < stages.length - 1) {
-          return stages[currentIndex + 1].id;
-        }
-        return prev;
-      });
-    }
-  };
 
   const getStageStatus = (stageId) => {
-    // Phase 1: Check object format for tick system
+    // For mix stage: check backend state (projectData.mix.completed) as single source of truth
+    if (stageId === 'mix') {
+      // Only mark complete if projectData.mix.completed === true
+      if (projectData?.mix?.completed === true) {
+        return 'completed';
+      }
+      return 'upcoming';
+    }
+    
+    // For other stages: use completedStages prop
     if (completedStages[stageId]) return 'completed';
     
     return 'upcoming';
   };
-
-  // Mix stage completion is handled via completeStage prop passed from App.jsx
-  // When MixStage calls completeStage("mix"), App.jsx updates completedStages
-  // and Timeline automatically reflects the completion status
 
   const getStagePrompt = () => {
     const stage = stages.find(s => s.id === currentStage);
@@ -68,8 +49,10 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
     return stage ? prompts[currentStage] || 'Continue your creative journey' : '';
   };
 
-  // Phase 1: Calculate progress from object format
-  const completedCount = Object.keys(completedStages).filter(key => completedStages[key]).length;
+  // Calculate progress - count completed stages, using projectData.mix.completed for mix stage
+  const baseCompleted = Object.keys(completedStages).filter(key => key !== 'mix' && completedStages[key]).length;
+  const mixCompleted = projectData?.mix?.completed === true ? 1 : 0;
+  const completedCount = baseCompleted + mixCompleted;
   const progressPercentage = (completedCount / stages.length) * 100;
   const isGoalReached = completedCount === stages.length;
 
@@ -97,7 +80,7 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
 
   return (
     <>
-      <div className="timeline timeline-container">
+      <div className="timeline timeline-container flex w-full justify-center items-center gap-4">
         {showBackButton && (
           <motion.button
             initial={{ opacity: 0, y: -10 }}
@@ -121,8 +104,8 @@ const Timeline = forwardRef(({ currentStage, activeStage, completedStages = [], 
         
         {stages.map((stage, index) => {
           const status = getStageStatus(stage.id);
-          // Fix glow behavior - only clicked module should glow (not based on completion or currentStage)
-          const isActive = activeStage === stage.id;
+          // Active stage highlighting - use activeStage prop or currentStage as fallback
+          const isActive = activeStage === stage.id || (activeStage === null && currentStage === stage.id);
           const isCompleted = status === 'completed';
           
           return (

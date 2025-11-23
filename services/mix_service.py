@@ -6,9 +6,6 @@ import asyncio
 import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from pydub import AudioSegment
-from pydub.effects import normalize
-from pydub.exceptions import CouldntDecodeError
 
 from project_memory import get_or_create_project_memory
 from backend.utils.responses import error_response, success_response
@@ -29,31 +26,16 @@ from utils.dsp.analyze_audio import (
 from utils.dsp.level import lufs, rms, auto_gain, match_loudness
 from utils.dsp.dynamics import soften_transients, micro_compress, smooth_vocals
 from utils.dsp.tonal_balance import tonal_balance_chain
-from utils.dsp.masking import detect_masking, resolve_masking
 from utils.dsp.spatial import spatial_pocket
 from utils.mix.roles import detect_role
-from utils.mix.recipes import MIX_RECIPES
+from utils.mix.mix_recipes import MIX_RECIPES
 from utils.mix.config_apply import apply_recipe
 from models.mix_config import MixConfig, TrackConfig, MasterConfig
 from jobs.mix_job_manager import MixJobManager, JOBS
 from services.transport_service import get_transport
 
 
-def apply_basic_mix(vocal_path: str, beat_path: str, output_path: str):
-    """Apply basic mix by overlaying vocal on beat"""
-    from pydub import AudioSegment
-    
-    vocal = AudioSegment.from_file(vocal_path)
-    beat = AudioSegment.from_file(beat_path)
-    
-    mixed = beat.overlay(vocal)
-    mixed.export(output_path, format="mp3")
-    
-    return output_path
-
 logger = logging.getLogger(__name__)
-
-MAX_DURATION_MS = 10 * 60 * 1000  # 10 minutes
 
 # Storage directory for mix outputs
 STORAGE_MIX_OUTPUTS = Path("./storage/mix_outputs")
@@ -133,153 +115,27 @@ class MixService:
     def apply_tonal_balance(samples: np.ndarray, role: str) -> np.ndarray:
         try:
             return tonal_balance_chain(samples, role)
-        except Exception:
+        except Exception as e:
+            logging.error(f"Tonal balance failed: {e}")
             return samples
     
     @staticmethod
     def apply_spatial_separation(stereo_samples: np.ndarray, role: str):
         try:
             return spatial_pocket(stereo_samples, role)
-        except Exception:
+        except Exception as e:
+            logging.error(f"Spatial separation failed: {e}")
             return stereo_samples
     
     @staticmethod
     def apply_frequency_masking(vocal_samples, beat_samples):
         try:
+            from utils.dsp.masking import detect_masking, resolve_masking
             masked_freqs = detect_masking(vocal_samples, beat_samples)
             return resolve_masking(beat_samples, masked_freqs)
-        except Exception:
-            return beat_samples
-    
-    @staticmethod
-    async def run_clean_mix(request, project_id: Optional[str] = None) -> dict:
-        """
-        Clean mix: overlay vocal on beat using pydub
-        
-        Args:
-            request: CleanMixRequest object with vocal_url, beat_url, session_id, etc.
-            project_id: Project ID (session_id) for project memory updates
-            
-        Returns:
-            Success or error response dict
-        """
-        logger.info("Running clean mix…")
-        
-        try:
-            project_id = project_id or request.session_id
-            
-            # Resolve file paths (handle both /media/... and ./media/... paths)
-            vocal_path = request.vocal_url
-            if vocal_path.startswith("/media/"):
-                vocal_path = "." + vocal_path
-            elif not vocal_path.startswith("./"):
-                vocal_path = "./" + vocal_path.lstrip("/")
-            
-            beat_path = request.beat_url
-            if beat_path.startswith("/media/"):
-                beat_path = "." + beat_path
-            elif not beat_path.startswith("./"):
-                beat_path = "./" + beat_path.lstrip("/")
-            
-            # Validate files exist
-            vocal_path_obj = Path(vocal_path)
-            beat_path_obj = Path(beat_path)
-            
-            vocal_exists = await asyncio.to_thread(vocal_path_obj.exists)
-            beat_exists = await asyncio.to_thread(beat_path_obj.exists)
-            
-            if not vocal_exists or not beat_exists:
-                return error_response(
-                    "INVALID_AUDIO",
-                    400,
-                    "The provided vocal or beat file is corrupted or unsupported."
-                )
-            
-            # Load files
-            try:
-                beat = await asyncio.to_thread(AudioSegment.from_file, beat_path)
-                vocal = await asyncio.to_thread(AudioSegment.from_file, vocal_path)
-            except CouldntDecodeError:
-                return error_response("INVALID_AUDIO", 400, "Could not decode audio")
-            
-            # Align durations
-            if len(vocal) > len(beat):
-                beat = beat.append(AudioSegment.silent(duration=len(vocal) - len(beat)))
-            else:
-                vocal = vocal.append(AudioSegment.silent(duration=len(beat) - len(vocal)))
-            
-            # Basic mixing
-            mixed = beat.overlay(vocal)
-            
-            # Normalization
-            mixed = normalize(mixed)
-            
-            # Save output
-            session_dir = MEDIA_DIR / project_id
-            session_dir.mkdir(parents=True, exist_ok=True)
-            output_path = session_dir / "mix" / "mixed_output.wav"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(mixed.export, output_path, format="wav")
-            
-            # Return JSON
-            mix_url = f"/media/{project_id}/mix/mixed_output.wav"
-            
-            # Update project memory
-            memory = await get_or_create_project_memory(project_id, MEDIA_DIR, None)
-            if "mix" not in memory.project_data:
-                memory.project_data["mix"] = {}
-            memory.project_data["mix"].update({
-                "mix_url": mix_url,
-                "completed": True
-            })
-            await memory.save()
-            
-            return success_response(
-                data={"mix_url": mix_url},
-                message="Mix generated successfully"
-            )
-            
-        except CouldntDecodeError:
-            return error_response(
-                "INVALID_AUDIO",
-                400,
-                "Could not decode audio."
-            )
         except Exception as e:
-            logger.error(f"Clean mix failed: {e}")
-            return error_response("UNEXPECTED_ERROR", 500, f"Failed to create clean mix: {str(e)}")
-    
-    @staticmethod
-    def _audio_segment_to_numpy(audio: AudioSegment) -> np.ndarray:
-        """Convert AudioSegment to numpy array"""
-        # Get array of samples
-        samples = audio.get_array_of_samples()
-        # Convert to numpy array
-        samples_np = np.array(samples, dtype=np.float32)
-        # Normalize to [-1, 1]
-        samples_np = samples_np / 32768.0
-        # Reshape for stereo (if channels > 1)
-        if audio.channels > 1:
-            samples_np = samples_np.reshape(-1, audio.channels)
-        return samples_np
-    
-    @staticmethod
-    def _numpy_to_audio_segment(audio_data: np.ndarray, frame_rate: int = 44100, channels: int = 2) -> AudioSegment:
-        """Convert numpy array to AudioSegment"""
-        # Flatten if 2D
-        if audio_data.ndim > 1:
-            audio_data = audio_data.flatten()
-        # Denormalize from float32 [-1, 1] to int16
-        samples_int = (np.clip(audio_data, -1.0, 1.0) * 32767.0).astype(np.int16)
-        # Convert to bytes
-        raw_data = samples_int.tobytes()
-        # Create AudioSegment
-        return AudioSegment(
-            data=raw_data,
-            sample_width=2,  # 16-bit = 2 bytes
-            frame_rate=frame_rate,
-            channels=channels
-        )
+            logging.error(f"Frequency masking failed: {e}")
+            return beat_samples
     
     @staticmethod
     async def mix(session_id: str, stems: Dict[str, str], config: Optional[Dict[str, Any]] = None, job_id: Optional[str] = None) -> dict:
@@ -353,7 +209,7 @@ class MixService:
                     config = job.extra.get("config")
             
             # Process per-track DSP chain
-            processed_tracks = []
+            processed_tracks = {}  # Store as dict keyed by stem_name
             track_meters = {}
             track_spectra = {}
             track_streams = {}
@@ -377,28 +233,36 @@ class MixService:
                 track_config_raw["role"] = role
                 
                 # === AI AUTO GAIN (PRE-DSP) ===
-                gain_role = "default"
-                if config and hasattr(config, "tracks") and stem_name in config.tracks:
-                    gain_role = config.tracks[stem_name].role or "default"
+                gain_role = role  # Default to detected role
+                if config:
+                    if hasattr(config, "tracks"):
+                        track_cfg = config.tracks.get(stem_name) or {}
+                        gain_role = track_cfg.get("role") if isinstance(track_cfg, dict) else (getattr(track_cfg, "role", None) or role)
+                    else:
+                        track_cfg = config.get("tracks", {}).get(stem_name, {})
+                        gain_role = track_cfg.get("role", role)
                 
                 try:
                     audio_data = MixService.apply_auto_gain(audio_data, gain_role)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.error(f"DSP step failed: {e}")
+                    # Continue with original audio_data if auto gain fails
                 # === END AI AUTO GAIN ===
                 
                 # === MICRO-DYNAMICS (AFTER GAIN, BEFORE EQ) ===
                 try:
                     audio_data = MixService.apply_micro_dynamics(audio_data, role)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.error(f"DSP step failed: {e}")
+                    # Continue with original audio_data if micro-dynamics fails
                 # === END MICRO-DYNAMICS ===
                 
                 # === TONAL BALANCE (AFTER MICRO-DYNAMICS, BEFORE EQ) ===
                 try:
                     audio_data = MixService.apply_tonal_balance(audio_data, role)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logging.error(f"DSP step failed: {e}")
+                    # Continue with original audio_data if tonal balance fails
                 # === END TONAL BALANCE ===
                 
                 # === SPATIAL SEPARATION (AFTER TONAL BALANCE, BEFORE EQ) ===
@@ -411,25 +275,12 @@ class MixService:
                     
                     stereo = MixService.apply_spatial_separation(stereo, role)
                     
-                    # Reduce back to mono for downstream DSP if required
-                    audio_data = stereo.mean(axis=0)
-                except Exception:
-                    pass
+                    # Keep stereo for downstream DSP
+                    audio_data = stereo
+                except Exception as e:
+                    logging.error(f"DSP step failed: {e}")
+                    # Continue with original audio_data if spatial separation fails
                 # === END SPATIAL SEPARATION ===
-                
-                # === FREQUENCY MASKING (VOCAL vs BEAT) ===
-                try:
-                    if role in ["lead_vocal", "lead", "main_vocal"]:
-                        # Need beat samples to resolve masking
-                        # Cursor: if you cannot safely find beat stem access, SKIP this anchor.
-                        beat_samples = audio_data_dict.get("beat") if "beat" in audio_data_dict else None
-                        if beat_samples is not None:
-                            resolved_beat = MixService.apply_frequency_masking(audio_data, beat_samples)
-                            # Cursor: only replace beat track if you can safely identify it in pipeline.
-                            audio_data_dict["beat"] = resolved_beat
-                except Exception:
-                    pass
-                # === END FREQUENCY MASKING ===
                 
                 # Adapt config format for new DSP functions
                 track_config = {
@@ -442,7 +293,7 @@ class MixService:
                 
                 # Apply per-track DSP chain
                 processed_data, meter_data = process_track(audio_data, track_config)
-                processed_tracks.append(processed_data)
+                processed_tracks[stem_name] = processed_data
                 track_meters[stem_name] = meter_data
                 track_spectra[stem_name] = compute_track_spectrum(processed_data)
                 
@@ -450,21 +301,33 @@ class MixService:
                 track_chunks = chunk_audio(processed_data)
                 track_streams[stem_name] = track_chunks
             
+            # Apply masking AFTER track DSP
+            if "lead" in processed_tracks and "beat" in processed_tracks:
+                try:
+                    resolved = MixService.apply_frequency_masking(
+                        processed_tracks["lead"],
+                        processed_tracks["beat"]
+                    )
+                    processed_tracks["beat"] = resolved
+                except Exception as e:
+                    logging.error(f"Masking failed: {e}")
+            
             # Mixing
             if job_id:
                 MixJobManager.update(job_id, state="mixing", progress=65, message="Blending tracks…")
                 await asyncio.sleep(0.05)
             
-            # Blend tracks
-            blended_audio = blend_tracks(processed_tracks)
+            # Blend tracks (convert dict to list)
+            blended_audio = blend_tracks(list(processed_tracks.values()))
             
             # === MASTER LOUDNESS NORMALIZATION (BEFORE LIMITER) ===
             try:
                 TARGET_MASTER_LUFS = -9.5
                 master_gain = match_loudness(blended_audio, TARGET_MASTER_LUFS)
                 blended_audio = blended_audio * master_gain
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"DSP step failed: {e}")
+                # Continue with original blended_audio if normalization fails
             # === END MASTER NORMALIZATION ===
             
             # Generate pre-master streaming chunks
@@ -476,19 +339,63 @@ class MixService:
             pre_master_spectrum = compute_track_spectrum(blended_audio)
             
             # Apply mix recipe to master bus
-            project_settings = config.get("project_settings", {}) if config else {}
+            if config and hasattr(config, "project_settings"):
+                project_settings = config.project_settings or {}
+            else:
+                project_settings = config.get("project_settings", {}) if config else {}
+            
             recipe = MIX_RECIPES.get(project_settings.get("mix_recipe", "default"), MIX_RECIPES["default"])
-            master_cfg = recipe["master"]
+            
+            # Handle recipe as Pydantic model or dict
+            if hasattr(recipe, "master"):
+                master_cfg = recipe.master
+                # Convert Pydantic to dict if needed
+                if hasattr(master_cfg, "model_dump"):
+                    master_cfg_dict = master_cfg.model_dump()
+                elif hasattr(master_cfg, "dict"):
+                    master_cfg_dict = master_cfg.dict()
+                else:
+                    master_cfg_dict = master_cfg
+            else:
+                master_cfg_dict = recipe.get("master", {})
+            
+            # Extract values from master_cfg_dict (handle nested Pydantic models)
+            recipe_eq = master_cfg_dict.get("eq", []) if isinstance(master_cfg_dict, dict) else (getattr(master_cfg, "eq", []) if hasattr(master_cfg, "eq") else [])
+            recipe_compressor = master_cfg_dict.get("compressor") if isinstance(master_cfg_dict, dict) else (getattr(master_cfg, "compressor", None) if hasattr(master_cfg, "compressor") else None)
+            recipe_limiter_threshold = master_cfg_dict.get("limiter_threshold", -1.0) if isinstance(master_cfg_dict, dict) else (getattr(master_cfg, "limiter_threshold", -1.0) if hasattr(master_cfg, "limiter_threshold") else -1.0)
+            
+            # Convert compressor to dict if it's a Pydantic model
+            if recipe_compressor and not isinstance(recipe_compressor, dict):
+                if hasattr(recipe_compressor, "model_dump"):
+                    recipe_compressor = recipe_compressor.model_dump()
+                elif hasattr(recipe_compressor, "dict"):
+                    recipe_compressor = recipe_compressor.dict()
             
             # Apply mastering chain - adapt config format (recipe takes precedence, but allow user overrides)
-            mastering_config_raw = config.get("mastering_config", {}) if config else {}
+            if config and hasattr(config, "master"):
+                mastering_config_raw = config.master
+                if hasattr(mastering_config_raw, "model_dump"):
+                    mastering_config_raw = mastering_config_raw.model_dump()
+                elif hasattr(mastering_config_raw, "dict"):
+                    mastering_config_raw = mastering_config_raw.dict()
+            else:
+                mastering_config_raw = config.get("mastering_config", {}) if config else {}
+            
+            # Extract compressor settings
+            user_compressor = mastering_config_raw.get("compressor", {}) if isinstance(mastering_config_raw, dict) else {}
+            if user_compressor and not isinstance(user_compressor, dict):
+                if hasattr(user_compressor, "model_dump"):
+                    user_compressor = user_compressor.model_dump()
+                elif hasattr(user_compressor, "dict"):
+                    user_compressor = user_compressor.dict()
+            
             mastering_config = {
-                "eq": mastering_config_raw.get("eq_settings", master_cfg.get("eq", [])),
-                "threshold": mastering_config_raw.get("compressor", {}).get("threshold", master_cfg.get("threshold", -14)) if isinstance(mastering_config_raw.get("compressor"), dict) else master_cfg.get("threshold", -14),
-                "ratio": mastering_config_raw.get("compressor", {}).get("ratio", master_cfg.get("ratio", 2.0)) if isinstance(mastering_config_raw.get("compressor"), dict) else master_cfg.get("ratio", 2.0),
-                "attack": mastering_config_raw.get("compressor", {}).get("attack", master_cfg.get("attack", 10)) if isinstance(mastering_config_raw.get("compressor"), dict) else master_cfg.get("attack", 10),
-                "release": mastering_config_raw.get("compressor", {}).get("release", master_cfg.get("release", 50)) if isinstance(mastering_config_raw.get("compressor"), dict) else master_cfg.get("release", 50),
-                "ceiling": mastering_config_raw.get("limiter", {}).get("ceiling", master_cfg.get("ceiling", -1.0)) if isinstance(mastering_config_raw.get("limiter"), dict) else master_cfg.get("ceiling", -1.0)
+                "eq": mastering_config_raw.get("eq_settings", recipe_eq) if isinstance(mastering_config_raw, dict) else recipe_eq,
+                "threshold": user_compressor.get("threshold", recipe_compressor.get("threshold", -14)) if isinstance(user_compressor, dict) else (recipe_compressor.get("threshold", -14) if isinstance(recipe_compressor, dict) else -14),
+                "ratio": user_compressor.get("ratio", recipe_compressor.get("ratio", 2.0)) if isinstance(user_compressor, dict) else (recipe_compressor.get("ratio", 2.0) if isinstance(recipe_compressor, dict) else 2.0),
+                "attack": user_compressor.get("attack", recipe_compressor.get("attack", 10)) if isinstance(user_compressor, dict) else (recipe_compressor.get("attack", 10) if isinstance(recipe_compressor, dict) else 10),
+                "release": user_compressor.get("release", recipe_compressor.get("release", 50)) if isinstance(user_compressor, dict) else (recipe_compressor.get("release", 50) if isinstance(recipe_compressor, dict) else 50),
+                "ceiling": mastering_config_raw.get("limiter", {}).get("ceiling", recipe_limiter_threshold) if isinstance(mastering_config_raw, dict) and isinstance(mastering_config_raw.get("limiter"), dict) else recipe_limiter_threshold
             }
             # Mastering
             if job_id:
@@ -569,6 +476,18 @@ class MixService:
             final_url = f"/storage/mix_outputs/{session_id}/final_mix.wav"
             output_url = final_url
             
+            # Write to project memory
+            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
+            if "mix" not in memory.project_data:
+                memory.project_data["mix"] = {}
+            
+            memory.project_data["mix"].update({
+                "mix_url": final_url,
+                "final_output": final_url,
+                "completed": True
+            })
+            await memory.save()
+            
             return {
                 "is_error": False,
                 "data": {
@@ -582,53 +501,6 @@ class MixService:
             if job_id:
                 MixJobManager.update(job_id, state="error", progress=100, message="Mix failed", error=str(e))
             return {"is_error": True, "error": str(e)}
-    
-    @staticmethod
-    async def mix_audio(project_id: str, data) -> dict:
-        """
-        Basic mix using apply_basic_mix function
-        
-        Args:
-            project_id: Project ID (session_id)
-            data: MixRequest object with optional vocal_url, beat_url
-            
-        Returns:
-            Success response dict with mix_url
-        """
-        # Use project_id as session_id
-        session_id = project_id
-        
-        # compute paths (anonymous, no user_id)
-        base = MEDIA_DIR / session_id
-
-        vocal_path = base / "vocal.wav"
-        beat_path = base / "beat.mp3"
-        output_path = base / "mix" / "mix.wav"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # run DSP chain
-        await asyncio.to_thread(
-            apply_basic_mix,
-            str(vocal_path),
-            str(beat_path),
-            str(output_path)
-        )
-
-        # update project.json
-        result_url = f"/media/{session_id}/mix/mix.wav"
-        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
-        if "mix" not in memory.project_data:
-            memory.project_data["mix"] = {}
-        memory.project_data["mix"].update({
-            "path": result_url,
-            "processed": True
-        })
-        await memory.save()
-
-        return success_response(
-            data={"mix_url": result_url},
-            message="Mix generated successfully"
-        )
     
     @staticmethod
     async def get_mix_status(project_id: str) -> dict:
@@ -651,8 +523,8 @@ class MixService:
             status = "not_started"
             
             if mix_stage:
-                # Check for mix_url (from run_clean_mix) or path (from mix_audio)
-                mix_url = mix_stage.get("mix_url") or mix_stage.get("path")
+                # Check for mix_url
+                mix_url = mix_stage.get("mix_url")
                 
                 # If we have a URL, verify the file exists
                 if mix_url:
@@ -672,7 +544,7 @@ class MixService:
                         # URL exists in metadata but file is missing
                         status = "file_missing"
                         mix_url = None
-                elif mix_stage.get("completed") or mix_stage.get("processed"):
+                elif mix_stage.get("completed"):
                     # Stage marked as completed but no URL found
                     status = "completed_no_url"
                 else:
@@ -689,73 +561,3 @@ class MixService:
                 "mix_url": None
             }
     
-    @staticmethod
-    async def process_single_file(input_path: str, output_path: str, toggles: dict) -> dict:
-        """
-        Process a single audio file with optional mastering effects.
-        
-        Args:
-            input_path: Path to input audio file
-            output_path: Path to save processed output
-            toggles: Dict with apply_eq, apply_compression, apply_limiter, apply_saturation
-            
-        Returns:
-            Dict with processing results
-        """
-        try:
-            # Load input audio
-            audio = await asyncio.to_thread(AudioSegment.from_file, input_path)
-            
-            # Validate audio
-            if len(audio) <= 0:
-                raise ValueError("Empty audio file")
-            if len(audio) > MAX_DURATION_MS:
-                raise ValueError("Audio file exceeds maximum duration")
-            
-            # Apply effects based on toggles
-            if toggles.get("apply_eq"):
-                # Basic EQ: high-pass filter
-                audio = audio.high_pass_filter(80)
-            
-            if toggles.get("apply_compression"):
-                # Apply compression
-                audio = audio.compress_dynamic_range()
-            
-            if toggles.get("apply_limiter"):
-                # Apply limiter (normalize and reduce peak)
-                audio = normalize(audio)
-                if audio.max_dBFS > -1:
-                    audio = audio - (audio.max_dBFS + 1)
-            
-            if toggles.get("apply_saturation"):
-                # Apply saturation (subtle distortion)
-                # Use gain staging for subtle saturation effect
-                if audio.max_dBFS < -6:
-                    audio = audio + 3
-                    audio = audio.compress_dynamic_range()
-                    audio = audio - 2
-            
-            # Final normalization
-            audio = normalize(audio)
-            
-            # Ensure output directory exists
-            output_dir = Path(output_path).parent
-            output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Export processed audio
-            await asyncio.to_thread(audio.export, output_path, format="wav")
-            
-            logger.info(f"Processed single file: {input_path} -> {output_path}")
-            
-            return {
-                "success": True,
-                "duration_ms": len(audio),
-                "peak_dBFS": audio.max_dBFS
-            }
-            
-        except CouldntDecodeError:
-            raise ValueError("Could not decode audio file")
-        except Exception as e:
-            logger.error(f"Failed to process single file: {e}")
-            raise
-

@@ -34,25 +34,6 @@ mix_config_router = APIRouter(prefix="/api/mix", tags=["mix"])
 mix_service = MixService()
 
 
-@mix_router.post("/{project_id}/mix")
-async def mix_project(
-    project_id: str,
-    request: MixRequest = Body(...),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Run the full mix pipeline for a project.
-    """
-    try:
-        result = await mix_service.mix_audio(project_id, request)
-        log_endpoint_event(f"/projects/{project_id}/mix", project_id, "success", {})
-        return result
-    except Exception as e:
-        logger.error(f"Mix failed for project {project_id}: {e}")
-        log_endpoint_event(f"/projects/{project_id}/mix", project_id, "error", {"error": str(e)})
-        return error_response("MIX_ERROR", 500, f"Failed to mix audio: {str(e)}")
-
-
 @mix_router.get("/{project_id}/mix/status")
 async def get_mix_status(
     project_id: str,
@@ -107,7 +88,7 @@ async def start_mix(
             return error_response("NO_STEMS", 400, "No stems provided for mixing")
         
         # Enqueue mix job
-        job_id = await MixJobManager.enqueue_mix(session_id, stems, {})
+        job_id = await MixJobManager.enqueue_mix(session_id, stems, request.config or {})
         
         # Start mix processing (async)
         asyncio.create_task(_process_mix_job(job_id, session_id, stems))
@@ -227,8 +208,12 @@ async def list_streams(job_id: str):
 async def _process_mix_job(job_id: str, session_id: str, stems: dict):
     """Background task to process mix job"""
     try:
+        # Get config from job
+        job = JOBS.get(job_id)
+        config = job.extra.get("config")
+        
         # Run mix (progress tracking is handled inside MixService.mix)
-        result = await MixService.mix(session_id, stems, job_id=job_id)
+        result = await MixService.mix(session_id, stems, config=config, job_id=job_id)
         
         if result.get("is_error"):
             logger.error(f"Mix job {job_id} failed: {result.get('error')}")
@@ -299,3 +284,43 @@ async def apply_mix_config(request: ApplyConfigRequest):
         config_dict = config
     return {"success": True, "config": config_dict}
 
+
+@mix_config_router.post("/run-clean")
+async def run_clean_wrapper(
+    project_id: str = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Temporary compatibility wrapper.
+    Always triggers the DSP mix engine via the job system.
+    """
+    try:
+        session_id = project_id
+        
+        # Prepare stems from default locations
+        from config.settings import MEDIA_DIR
+        base = MEDIA_DIR / session_id
+        vocal_path = base / "vocal.wav"
+        beat_path = base / "beat.mp3"
+        
+        stems = {}
+        if vocal_path.exists():
+            stems["vocal"] = str(vocal_path)
+        if beat_path.exists():
+            stems["beat"] = str(beat_path)
+        
+        if not stems:
+            return error_response("NO_STEMS", 400, "No stems provided for mixing")
+        
+        # Enqueue mix job (same as start_mix)
+        job_id = await MixJobManager.enqueue_mix(session_id, stems, {})
+        
+        # Start mix processing (async)
+        asyncio.create_task(_process_mix_job(job_id, session_id, stems))
+        
+        log_endpoint_event("/api/mix/run-clean", project_id, "success", {"job_id": job_id})
+        return success_response({"job_id": job_id})
+    except Exception as e:
+        logger.error(f"Failed to run clean mix for project {project_id}: {e}")
+        log_endpoint_event("/api/mix/run-clean", project_id, "error", {"error": str(e)})
+        return error_response("MIX_START_ERROR", 500, f"Failed to start mix: {str(e)}")

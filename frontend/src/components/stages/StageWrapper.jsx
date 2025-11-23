@@ -40,7 +40,7 @@ export default function StageWrapper({ title, icon, children, onClose, onNext, v
       </div>
 
       {/* Content */}
-      <div className="stage-content">
+      <div className="stage-content flex flex-col items-center w-full h-full overflow-y-auto pb-8">
         {children}
       </div>
 

@@ -762,63 +762,45 @@ export async function createPortalSession() {
 }
 
 
-export const mixAudio = async (projectId) => {
-  try {
-    const res = await fetch(
-      `${API_BASE}/projects/${projectId}/mix`,
-      { 
-        method: "POST",
-        credentials: "include",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      }
-    );
-    if (!res.ok) throw new Error("Mix failed");
-    return await res.json();
-  } catch (err) {
-    console.error("mixAudio error:", err);
-    throw err;
-  }
-};
+// ========== DSP MIX JOB ENDPOINTS ==========
 
-// Process single file with mastering effects
-export const processSingleMix = async (file, toggles, sessionId = null) => {
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('apply_eq', toggles.apply_eq || false);
-    formData.append('apply_compression', toggles.apply_compression || false);
-    formData.append('apply_limiter', toggles.apply_limiter || false);
-    formData.append('apply_saturation', toggles.apply_saturation || false);
-    if (sessionId) formData.append('session_id', sessionId);
-
-    const response = await fetch(`${API_BASE}/mix/process-single`, {
+// Start a DSP mix job
+export async function startMix(projectId, config = {}) {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/mix/start`,
+    {
       method: 'POST',
       credentials: "include",
-      body: formData,
-    });
-    
-    const result = await handleResponse(response);
-    return { mix_url: result.mix_url || result.data?.mix_url };
-  } catch (err) {
-    console.error("processSingleMix error:", err);
-    throw err;
-  }
-};
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config })
+    }
+  );
+  const result = await handleResponse(response);
+  return result; // expects { job_id }
+}
 
-// Run clean mix using vocal and beat files from session data
-export const runCleanMix = async (vocalUrl, beatUrl, sessionId) => {
-  const response = await fetch(`${API_BASE}/mix/run-clean`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      session_id: sessionId,
-      vocal_url: vocalUrl,
-      beat_url: beatUrl
-    })
-  });
-  return handleResponse(response);
-};
+// Get mix job status
+export async function getMixStatus(projectId, jobId) {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/mix/status?job_id=${jobId}`,
+    {
+      method: 'GET',
+      credentials: "include"
+    }
+  );
+  const result = await handleResponse(response);
+  return result; // expects { state, mix_url? }
+}
+
+// Get mix preview URL
+export async function getMixPreview(projectId) {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/mix/preview`,
+    {
+      method: 'GET',
+      credentials: "include"
+    }
+  );
+  const result = await handleResponse(response);
+  return result; // expects { mix_url }
+}

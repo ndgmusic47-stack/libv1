@@ -128,7 +128,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # CORS MUST be near the bottom
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

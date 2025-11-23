@@ -7,7 +7,7 @@ from utils.dsp.deesser import apply_deesser
 from utils.dsp.air import add_air
 from utils.dsp.stereo import stereo_widen
 from utils.mix.roles import detect_role
-from utils.mix.presets import ROLE_PRESETS
+from utils.mix.role_presets import ROLE_PRESETS
 from utils.dsp.metering import compute_gain_reduction
 from utils.dsp.scope import compute_scope
 import numpy as np
@@ -35,14 +35,34 @@ def align_tracks(tracks):
 
 def process_track(audio_data, config):
     role = config.get("role", "unknown")
-    preset = ROLE_PRESETS.get(role, ROLE_PRESETS["unknown"])
+    # Map role names to preset keys
+    role_map = {
+        "lead": "lead_vocal",
+        "lead_vocal": "lead_vocal",
+        "main_vocal": "lead_vocal",
+        "adlib": "adlib",
+        "backing_vocal": "adlib",
+        "beat": "beat",
+        "instrumental": "beat",
+        "bass": "bass",
+    }
+    preset_key = role_map.get(role, "beat")  # Default to beat if role not found
+    preset_raw = ROLE_PRESETS.get(preset_key, {})
+    
+    # Convert Pydantic model to dict if needed
+    if preset_raw and hasattr(preset_raw, "model_dump"):
+        preset = preset_raw.model_dump()
+    elif preset_raw and hasattr(preset_raw, "dict"):
+        preset = preset_raw.dict()
+    else:
+        preset = preset_raw if preset_raw else {}
 
     # Merge preset with user-config (preset wins unless user overrides)
     merged = {
-        "eq": config.get("eq", preset["eq"]),
-        "compressor": config.get("compressor", preset["compressor"]),
-        "saturation": config.get("saturation", preset["saturation"]),
-        "gain": config.get("gain", preset["gain"])
+        "eq": config.get("eq", preset.get("eq", [])),
+        "compressor": config.get("compressor", preset.get("compressor", {})),
+        "saturation": config.get("saturation", preset.get("saturation", 0.0)),
+        "gain": config.get("gain", preset.get("gain", 0.0))
     }
 
     config = merged
