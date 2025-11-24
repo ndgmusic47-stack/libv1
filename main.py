@@ -216,20 +216,14 @@ app.include_router(social_router)
 # FRONTEND SERVING (MUST BE LAST - AFTER ALL API ROUTES)
 # ============================================================================
 
-FRONTEND_DIST = (Path(__file__).resolve().parent.parent / "frontend" / "dist")
+# Correct location in Render runtime: /opt/render/project/src/frontend/dist
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 # Mount assets folder
-app.mount(
-    "/assets",
-    StaticFiles(directory=FRONTEND_DIST / "assets"),
-    name="assets"
-)
+app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
 # Serve SPA fallback
-@app.get("/{full_path:path}")
-async def serve_spa(full_path: str):
-    index_file = FRONTEND_DIST / "index.html"
-    return FileResponse(index_file)
+app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa-root")
 
 if __name__ == "__main__":
     import uvicorn
