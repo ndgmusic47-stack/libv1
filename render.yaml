@@ -7,4 +7,7 @@ services:
       cd ..
       pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port 8000
+    envVars:
+      - key: NODE_VERSION
+        value: "18"
     autoDeploy: true

@@ -217,7 +217,7 @@ app.include_router(social_router)
 # ============================================================================
 
 # Correct location in Render runtime: /opt/render/project/src/frontend/dist
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
 
 # Mount assets folder
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
