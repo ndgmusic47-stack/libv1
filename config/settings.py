@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     render_external_url: Optional[str] = Field(default=None, alias="RENDER_EXTERNAL_URL")
     render_service_name: Optional[str] = Field(default=None, alias="RENDER_SERVICE_NAME")
     
+    # Environment configuration
+    env: Optional[str] = Field(default=None, alias="ENV")
+    
     # Configuration class for Pydantic v1 (also works in v2 with deprecation warning)
     class Config:
         env_file = ".env"
@@ -78,4 +81,7 @@ if PYDANTIC_V2:
 
 # Instantiate settings object
 settings = Settings()
+
+# Determine if we're in production mode
+IS_PRODUCTION = bool(settings.render) or (settings.env and settings.env.lower() == "production")
 

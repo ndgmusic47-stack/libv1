@@ -2,15 +2,25 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from typing import AsyncGenerator
 
-from config.settings import settings
+from config.settings import settings, IS_PRODUCTION
+
+# Validate production database configuration
+if IS_PRODUCTION:
+    if not settings.database_url:
+        raise RuntimeError("DATABASE_URL must be set in production. SQLite is not allowed in production.")
+    if "sqlite" in settings.database_url.lower():
+        raise RuntimeError("SQLite is forbidden in production. Use a PostgreSQL DATABASE_URL.")
 
 # Default to SQLite with aiosqlite, but allow override via DATABASE_URL env var
 DATABASE_URL = settings.database_url or "sqlite+aiosqlite:///./sql_app.db"
 
+# Force SQLAlchemy to use psycopg2 sync driver safely inside async engine
+sync_url = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
 # Create async engine
 engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,  # Set to True for SQL query logging during development
+    sync_url,
+    echo=False,
     future=True,
 )
 
