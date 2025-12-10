@@ -244,7 +244,7 @@ export const api = {
    formData.append('file', file);
    if (sessionId) formData.append('session_id', sessionId);
 
-   const response = await fetch(`${API_BASE}/upload-audio`, {
+   const response = await fetch(`${API_BASE}/media/upload/vocal`, {
      method: "POST",
      credentials: "include",
      body: formData,
@@ -749,6 +749,21 @@ export const api = {
      }
    });
    return handleResponse(response);
+  },
+
+  // ========== MIX JOB ENDPOINTS ==========
+  startMix: async (projectId, config = {}) => {
+    const response = await fetch(
+      `${API_BASE}/projects/${projectId}/mix/start`,
+      {
+        method: 'POST',
+        credentials: "include",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config })
+      }
+    );
+    const result = await handleResponse(response);
+    return result; // expects { job_id }
   },
 };
 

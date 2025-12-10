@@ -3,14 +3,11 @@ uvicorn[standard]
 pydantic
 pydantic-settings
 pydub
-moviepy
-Pillow
 python-multipart
 requests
 openai
 librosa
 soundfile
-spotipy
 numpy
 scipy
 gtts

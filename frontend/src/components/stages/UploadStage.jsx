@@ -82,8 +82,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       // Upload recording
       const result = await api.uploadRecording(file, sessionId);
       
-      // V20: Extract file URL from result
-      const fileUrl = result.file_url || result.vocal_url || result.uploaded;
+      // MVP PATCH: Extract file URL from 'file_path' returned by the FastAPI endpoint
+      const fileUrl = result.file_path; // <== Now reads correct key
       
       // V20: Update sessionData with vocal file
       updateSessionData({
@@ -124,12 +124,20 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
     }
   };
 
+  // MVP PATCH: Handle progression to the next stage (Mix)
+  const handleNextStage = async () => {
+    // 1. Trigger the Mix job on the backend
+    await api.startMix(sessionId);
+    // 2. Proceed to the next stage in the UI
+    onNext();
+  };
+
   return (
     <StageWrapper 
       title="Upload Recording" 
       icon="🎤" 
       onClose={onClose}
-      onNext={onNext}
+      onNext={handleNextStage}
       voice={voice}
     >
       <div className="stage-scroll-container">

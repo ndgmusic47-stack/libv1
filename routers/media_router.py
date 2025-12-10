@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 media_router = APIRouter(prefix="/api")
 
 
+# === FIX 1: Add alias route to match frontend calls ===
+@media_router.post("/upload/vocal")
+async def upload_vocal_alias(
+    file: UploadFile = File(...),
+    session_id: Optional[str] = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Alias for /upload-audio to match frontend expectation at /api/media/upload/vocal"""
+    return await upload_audio(file, session_id, db)
+
+# Existing upload route
 @media_router.post("/upload-audio")
 async def upload_audio(
     file: UploadFile = File(...),
@@ -79,7 +90,8 @@ async def upload_audio(
     return success_response(
         data={
             "session_id": session_id,
-            "file_url": file_url
+            "file_url": file_url,
+            "file_path": file_url,  # <== FIX 2: Add file_path to satisfy frontend expectation
         },
         message="Vocal uploaded"
     )

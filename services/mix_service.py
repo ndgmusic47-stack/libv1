@@ -5,10 +5,9 @@ import logging
 import asyncio
 import numpy as np
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 from project_memory import get_or_create_project_memory
-from backend.utils.responses import error_response, success_response
 from config.settings import MEDIA_DIR
 from utils.dsp.mix_pipeline import process_track, process_master_bus, blend_tracks
 from utils.dsp.load import load_wav
@@ -16,6 +15,7 @@ from utils.dsp.export import save_wav
 from utils.dsp.stereo import stereo_widen
 from utils.dsp.scope import compute_scope
 from utils.dsp.streamer import chunk_audio
+from utils.dsp.timing import align_stems  # New DSP utility for alignment
 from utils.dsp.analyze_audio import (
     compute_waveform,
     compute_fft_spectrum,
@@ -30,7 +30,7 @@ from utils.dsp.spatial import spatial_pocket
 from utils.mix.roles import detect_role
 from utils.mix.mix_recipes import MIX_RECIPES
 from utils.mix.config_apply import apply_recipe
-from models.mix_config import MixConfig, TrackConfig, MasterConfig
+
 from jobs.mix_job_manager import MixJobManager, JOBS
 from services.transport_service import get_transport
 
@@ -193,7 +193,19 @@ class MixService:
             # Aligning stems
             if job_id:
                 MixJobManager.update(job_id, state="aligning_stems", progress=25, message="Aligning stems…")
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.05) 
+
+            # === IMPLEMENTATION: STEM ALIGNMENT ===
+            # Note: align_stems will detect the onset difference between the "beat" and "vocal" stems
+            # and shift/pad the vocal stem to synchronize it with the beat.
+            if "vocal" in audio_data_dict and "beat" in audio_data_dict:
+                try:
+                    # Perform alignment (returns the entire aligned dict)
+                    audio_data_dict = await asyncio.to_thread(align_stems, audio_data_dict)
+                except Exception as e:
+                    logger.error(f"Stem alignment failed: {e}")
+                    # Non-fatal: continue mixing without alignment
+            # === END ALIGNMENT ===
             
             # Processing track DSP
             if job_id:
