@@ -13,6 +13,7 @@ scipy
 gtts
 python-dotenv
 aubio
+asyncpg  # Required for asynchronous PostgreSQL connections
 reportlab
 stripe
 sqlalchemy
