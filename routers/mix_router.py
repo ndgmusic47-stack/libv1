@@ -25,7 +25,7 @@ from services.transport_service import play, pause, stop, seek
 logger = logging.getLogger(__name__)
 
 # Create router
-mix_router = APIRouter(prefix="/api/projects", tags=["mix"])
+mix_router = APIRouter(prefix="/mix", tags=["Mix & Mastering"])
 
 # Create separate router for mix config endpoints
 mix_config_router = APIRouter(prefix="/api/mix", tags=["mix"])
