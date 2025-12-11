@@ -25,6 +25,7 @@ from routers.mix_ws_router import router as mix_ws_router
 from routers.release_router import release_router
 from routers.analytics_router import analytics_router
 from routers.social_router import social_router
+from routers import projects_router, credits_router
 from utils.rate_limit import RateLimiterMiddleware
 from database import init_db
 from config.settings import settings, MEDIA_DIR
@@ -211,6 +212,8 @@ app.include_router(mix_ws_router)
 app.include_router(release_router)
 app.include_router(analytics_router)
 app.include_router(social_router)
+app.include_router(projects_router.router)
+app.include_router(credits_router.router)
 
 # ============================================================================
 # FRONTEND SERVING (MUST BE LAST - AFTER ALL API ROUTES)

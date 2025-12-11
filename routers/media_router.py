@@ -19,7 +19,7 @@ from config.settings import MEDIA_DIR
 logger = logging.getLogger(__name__)
 
 # Create router with /media prefix to correctly structure API calls (e.g., /api/media/...)
-media_router = APIRouter(prefix="/media")
+media_router = APIRouter(prefix="/api/media")
 
 
 # === FIX 1: Add alias route to match frontend calls ===

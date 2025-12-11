@@ -13,7 +13,7 @@ from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
 
 # Create router
-beat_router = APIRouter(prefix="/beats", tags=["Beat Generation"])
+beat_router = APIRouter(prefix="/api/beats", tags=["Beat Generation"])
 
 # Request models
 class BeatRequest(BaseModel):
