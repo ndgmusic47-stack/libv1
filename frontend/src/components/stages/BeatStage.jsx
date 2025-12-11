@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
@@ -10,26 +10,8 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
   const [loading, setLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState(null);
-  const [credits, setCredits] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [beatMetadata, setBeatMetadata] = useState(null);
-
-  // Load credits on mount
-  useEffect(() => {
-    const loadCredits = async () => {
-      try {
-        const res = await fetch("/api/credits", {
-          credentials: "include"
-        });
-        const data = await res.json();
-        setCredits(data.credits);
-      } catch (err) {
-        console.error("Failed to load credits:", err);
-      }
-    };
-
-    loadCredits();
-  }, []);
 
   const handleGenerateClick = () => {
     if (!promptText.trim()) {
@@ -70,17 +52,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
       
       // For now, do NOT call syncProject here.
       // We rely on the direct API response for beatFile in this stage.
-      
-      // Reload credits after generation
-      try {
-        const res = await fetch("/api/credits", {
-          credentials: "include"
-        });
-        const data = await res.json();
-        setCredits(data.credits);
-      } catch (err) {
-        console.error('Failed to reload credits:', err);
-      }
       
       // Mark beat stage as complete
       if (completeStage) {
@@ -163,17 +134,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
             />
           </div>
 
-          {/* Credits Status */}
-          {credits === null ? (
-            <span className="text-xs text-red-400 block text-center">
-              Beat credits unavailable – check API key
-            </span>
-          ) : (
-            <span className={`text-xs block text-center ${credits <= 0 ? "text-red-400" : "text-emerald-400"}`}>
-              Beat credits available: {credits}
-            </span>
-          )}
-
           <motion.button
             onClick={handleGenerateClick}
             disabled={loading || isGenerating}
@@ -255,15 +215,8 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div className="modal-container bg-studio-gray border border-studio-white/20 rounded-lg max-w-md w-full mx-4">
               <h3 className="text-lg text-studio-gold font-montserrat mb-0">🎵 Generate a Beat?</h3>
-              <p className="text-sm text-studio-white/70 font-poppins mb-0">
-                This will create a new AI beat using 1 credit.
-              </p>
-              <p className="text-xs text-studio-white/60 font-poppins mb-0">
-                {credits === null ? (
-                  <span className="text-red-400">Beat credits unavailable – check API key</span>
-                ) : (
-                  <>Credits remaining: {credits}</>
-                )}
+              <p className="text-sm text-slate-200 font-poppins mb-0">
+                This will create a new AI beat. It may take up to a few minutes.
               </p>
               <div className="flex gap-3">
                 <motion.button

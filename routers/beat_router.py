@@ -60,6 +60,10 @@ async def create_beat(
     if duration_provided and duration_sec is not None:
         duration_sec = max(10, min(300, duration_sec))
     
+    # Default to ~3 minutes when no explicit duration is sent by the frontend
+    if not duration_provided or duration_sec is None:
+        duration_sec = 180
+    
     try:
         result = await beat_service.create_beat_track(
             session_id=session_id,
@@ -67,7 +71,7 @@ async def create_beat(
             mood=mood,
             genre=genre,
             bpm=bpm,
-            duration_sec=duration_sec if duration_provided else None,
+            duration_sec=duration_sec,
             db=db
         )
         
