@@ -176,8 +176,8 @@ export const api = {
    return handleResponse(response);
  },
 
- generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
-   const response = await fetch(`${API_BASE}/songs/write`, {
+generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
+  const response = await fetch(`${API_BASE}/lyrics/songs/write`, {
      method: 'POST',
      credentials: "include",
      headers: { 'Content-Type': 'application/json' },

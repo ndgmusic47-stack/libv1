@@ -120,7 +120,7 @@ async def write_song(
         )
 
 
-@lyrics_router.post("/lyrics/from_beat")
+@lyrics_router.post("/from_beat")
 async def generate_lyrics_from_beat(
     file: UploadFile = File(...),
     session_id: Optional[str] = Form(None)
@@ -162,7 +162,7 @@ async def generate_lyrics_from_beat(
         )
 
 
-@lyrics_router.post("/lyrics/free")
+@lyrics_router.post("/free")
 async def generate_free_lyrics(request: FreeLyricsRequest):
     """V17: Generate NP22-style lyrics from theme only"""
     try:
@@ -180,7 +180,7 @@ async def generate_free_lyrics(request: FreeLyricsRequest):
         )
 
 
-@lyrics_router.post("/lyrics/refine")
+@lyrics_router.post("/refine")
 async def refine_lyrics(request: LyricRefineRequest):
     """V18.1: Refine, rewrite, or extend lyrics based on user instructions with structured parsing and history"""
     try:

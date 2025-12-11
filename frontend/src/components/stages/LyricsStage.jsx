@@ -107,6 +107,8 @@ const estimateBarRhythm = (lyricsText) => {
 };
 
 export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+  const allowed = true;  // MVP gating off
+  const message = '';    // MVP no upgrade message
 
   const [theme, setTheme] = useState('');
   const [loading, setLoading] = useState(false);
@@ -138,6 +140,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       }
       voice.speak('Here are your lyrics generated from the beat.');
     } catch (err) {
+      console.error('LyricsStage error:', err);
       voice.speak('Sorry, couldn\'t generate lyrics right now.');
     } finally {
       setLoading(false);
@@ -169,6 +172,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       }
       voice.speak('Here are your free lyrics.');
     } catch (err) {
+      console.error('LyricsStage error:', err);
       voice.speak('Sorry, couldn\'t generate lyrics right now.');
     } finally {
       setLoading(false);
@@ -206,6 +210,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       }
       voice.speak('Here are your lyrics based on the session beat.');
     } catch (err) {
+      console.error('LyricsStage error:', err);
       voice.speak("Couldn't generate lyrics from the session beat.");
     } finally {
       setLoading(false);
@@ -241,6 +246,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       }
       voice.speak('Here are your lyrics. Let me read them to you.');
     } catch (err) {
+      console.error('LyricsStage error:', err);
       voice.speak('Sorry, couldn\'t generate lyrics right now.');
     } finally {
       setLoading(false);
@@ -298,6 +304,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       setRefineText('');
       voice.speak("Here are your refined lyrics.");
     } catch (err) {
+      console.error('LyricsStage error:', err);
       voice.speak("Could not refine lyrics right now.");
     } finally {
       setLoading(false);
