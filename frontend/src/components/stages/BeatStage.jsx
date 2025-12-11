@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
-import WavesurferPlayer from '../WavesurferPlayer';
 
 export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
 
@@ -62,15 +61,15 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
         setBeatMetadata(metadata);
       }
       
-      // Sync beat metadata into project memory correctly - MUST happen BEFORE syncProject
+      // Sync beat metadata into project memory correctly
       updateSessionData({ 
         mood: mood,
         beatMetadata: metadata,   // includes bpm, key, duration
         beatFile: result.beat_url || result.url,  // already returned
       });
       
-      // Sync with backend project state
-      await api.syncProject(sessionId, updateSessionData);
+      // For now, do NOT call syncProject here.
+      // We rely on the direct API response for beatFile in this stage.
       
       // Reload credits after generation
       try {
@@ -205,7 +204,13 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
                   {beatMetadata.key && <div>• Key: {beatMetadata.key}</div>}
                 </div>
               )}
-              <WavesurferPlayer url={sessionData.beatFile} color="#EF4444" height={100} />
+              <audio
+                src={sessionData.beatFile}
+                controls
+                style={{ width: "100%", marginTop: "0.5rem" }}
+              >
+                Your browser does not support the audio element.
+              </audio>
               <div className="flex gap-2 mt-3">
                 <motion.button
                   onClick={() => {
