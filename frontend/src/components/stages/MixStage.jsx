@@ -10,7 +10,7 @@ import { useMultiTrackWaveform } from '../../hooks/useMultiTrackWaveform';
 import { useTimelineZoomPan } from '../../hooks/useTimelineZoomPan';
 import PreviewPlayer from '../PreviewPlayer';
 
-export default function MixStage({ openUpgradeModal, sessionId, sessionData, voice, onClose, onNext, completeStage }) {
+export default function MixStage({ openUpgradeModal, sessionId, sessionData, voice, onClose, onNext, onBack, completeStage }) {
   const allowed = true; // No auth - always allowed
 
   const projectId = sessionId;
@@ -133,6 +133,7 @@ export default function MixStage({ openUpgradeModal, sessionId, sessionData, voi
       icon="🎛️" 
       onClose={onClose}
       onNext={onNext}
+      onBack={onBack}
       voice={voice}
     >
       <div className="stage-scroll-container">

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 
-export default function ReleaseStage({ openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, sessionId, completeStage, masterFile, onComplete }) {
+export default function ReleaseStage({ openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, onBack, sessionId, completeStage, masterFile, onComplete }) {
   const allowed = true; // No auth - always allowed
 
   // Form inputs
@@ -287,6 +287,7 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
       icon="📦" 
       onClose={onClose}
       onNext={onNext}
+      onBack={onBack}
       voice={voice}
     >
       <div className="stage-scroll-container">

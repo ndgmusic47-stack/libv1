@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 
-export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
 
   const [mood, setMood] = useState(sessionData.mood || 'energetic');
   const [promptText, setPromptText] = useState('');
@@ -95,6 +95,7 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
       icon="🎵" 
       onClose={onClose}
       onNext={onNext}
+      onBack={onBack}
       voice={voice}
       onVoiceCommand={handleVoiceCommand}
     >

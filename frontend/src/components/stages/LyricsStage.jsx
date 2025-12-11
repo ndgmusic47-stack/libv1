@@ -106,7 +106,7 @@ const estimateBarRhythm = (lyricsText) => {
   return rhythmMap;
 };
 
-export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
   const allowed = true;  // MVP gating off
   const message = '';    // MVP no upgrade message
 
@@ -319,6 +319,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       icon="📝" 
       onClose={onClose}
       onNext={onNext}
+      onBack={onBack}
       voice={voice}
     >
       <div className="stage-scroll-container">

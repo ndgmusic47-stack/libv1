@@ -20,7 +20,7 @@ function computeViralityScore(caption, title, hook) {
   return Math.min(score, 95);
 }
 
-export default function ContentStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function ContentStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
   const allowed = true; // No auth - always allowed
 
   const [activeTab, setActiveTab] = useState('social');
@@ -243,6 +243,7 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
       icon="🎬" 
       onClose={onClose}
       onNext={onNext}
+      onBack={onBack}
       voice={voice}
     >
       <div className="flex flex-col h-full">

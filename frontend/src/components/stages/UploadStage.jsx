@@ -4,7 +4,7 @@ import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function UploadStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, completeStage }) {
+export default function UploadStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
   const allowed = true; // No auth - always allowed
 
   const [dragging, setDragging] = useState(false);
@@ -138,6 +138,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       icon="🎤" 
       onClose={onClose}
       onNext={handleNextStage}
+      onBack={onBack}
       voice={voice}
     >
       <div className="stage-scroll-container">
