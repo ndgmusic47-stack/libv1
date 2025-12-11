@@ -128,11 +128,53 @@ export default function AppPage() {
   };
 
   const goToNextStage = () => {
-    const index = stageOrder.indexOf(activeStage);
-    if (index !== -1 && index < stageOrder.length - 1) {
-      const nextStage = stageOrder[index + 1];
-      openStage(nextStage);
+    // Prefer activeStage, but fall back to currentStage if needed
+    const current = activeStage || currentStage;
+
+    const index = stageOrder.indexOf(current);
+    if (index === -1) {
+      console.warn(
+        '[Navigation] goToNextStage: current stage not found in stageOrder',
+        { activeStage, currentStage, stageOrder }
+      );
+      return;
     }
+
+    if (index >= stageOrder.length - 1) {
+      console.info('[Navigation] goToNextStage: already at last stage', {
+        current,
+        index,
+      });
+      return;
+    }
+
+    const nextStage = stageOrder[index + 1];
+    openStage(nextStage);
+  };
+
+  const goToPreviousStage = () => {
+    // Prefer activeStage, but fall back to currentStage if needed
+    const current = activeStage || currentStage;
+
+    const index = stageOrder.indexOf(current);
+    if (index === -1) {
+      console.warn(
+        '[Navigation] goToPreviousStage: current stage not found in stageOrder',
+        { activeStage, currentStage, stageOrder }
+      );
+      return;
+    }
+
+    if (index <= 0) {
+      console.info('[Navigation] goToPreviousStage: already at first stage', {
+        current,
+        index,
+      });
+      return;
+    }
+
+    const prevStage = stageOrder[index - 1];
+    openStage(prevStage);
   };
 
   const handleAnalyticsClose = () => {
@@ -244,6 +286,7 @@ export default function AppPage() {
       voice,
       onClose: handleClose,
       onNext: goToNextStage,
+      onBack: goToPreviousStage,
       completeStage: completeCurrentStage,
     };
 

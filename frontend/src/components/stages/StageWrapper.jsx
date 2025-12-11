@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 
-export default function StageWrapper({ title, icon, children, onClose, onNext, voice, onVoiceCommand }) {
+export default function StageWrapper({ title, icon, children, onClose, onNext, onBack, voice, onVoiceCommand }) {
   useEffect(() => {
     if (voice && onVoiceCommand) {
       const checkTranscript = setInterval(() => {
@@ -44,17 +44,30 @@ export default function StageWrapper({ title, icon, children, onClose, onNext, v
         {children}
       </div>
 
-      {/* Next Button */}
-      {onNext && (
+      {/* Back and Next Buttons */}
+      {(onBack || onNext) && (
         <div className="stage-footer">
-          <motion.button
-            onClick={onNext}
-            className="stage-next-button"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            Next →
-          </motion.button>
+          {onBack && (
+            <motion.button
+              onClick={onBack}
+              className="stage-next-button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              ← Back
+            </motion.button>
+          )}
+          {onNext && (
+            <motion.button
+              onClick={onNext}
+              className="stage-next-button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{ marginLeft: onBack ? '1rem' : 0 }}
+            >
+              Next →
+            </motion.button>
+          )}
         </div>
       )}
     </div>
