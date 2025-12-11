@@ -50,7 +50,8 @@ export default function AppPage() {
     "upload",    // Beat upload module
     "mix",       // Mix Stage
     "release",   // Release Pack module
-    "content"    // Content/Viral module
+    "content",   // Content/Viral module
+    "analytics"  // Analytics / dashboard module
   ];
 
   // Load project data on mount (workflow status is tracked in project memory)

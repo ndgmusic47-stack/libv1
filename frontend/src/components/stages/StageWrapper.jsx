@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 
-export default function StageWrapper({ title, icon, children, onClose, onNext, onBack, voice, onVoiceCommand }) {
+export default function StageWrapper({ title, icon, children, onClose, onNext, onBack, voice, onVoiceCommand, nextDisabled = false }) {
   useEffect(() => {
     if (voice && onVoiceCommand) {
       const checkTranscript = setInterval(() => {
@@ -71,6 +71,7 @@ export default function StageWrapper({ title, icon, children, onClose, onNext, o
                 className="stage-next-button"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                disabled={nextDisabled}
               >
                 Next →
               </motion.button>

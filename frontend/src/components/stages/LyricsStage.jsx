@@ -118,6 +118,13 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
   // V18.1: Conversation history tracking
   const [history, setHistory] = useState([]);
 
+  // Initialize lyrics from sessionData on mount
+  useEffect(() => {
+    if (sessionData && sessionData.lyricsData && !lyrics) {
+      setLyrics(sessionData.lyricsData);
+    }
+  }, [sessionData, lyrics]);
+
   const handleBeatUpload = (e) => setBeatFile(e.target.files[0]);
 
   const handleGenerateFromBeat = async () => {
@@ -217,42 +224,6 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
     }
   };
 
-  const handleGenerate = async () => {
-    if (!allowed) {
-      openUpgradeModal();
-      return;
-    }
-
-    setLoading(true);
-    
-    try {
-      voice.speak(`Writing lyrics about ${theme || 'the vibe'}...`);
-      
-      // Generate lyrics
-      const result = await api.generateLyrics(
-        sessionData.genre || 'hip hop',
-        sessionData.mood || 'energetic',
-        theme,
-        sessionId
-      );
-      
-      // Sync with backend project state
-      await api.syncProject(sessionId, updateSessionData);
-      
-      setLyrics(result.lyrics);
-      updateSessionData({ lyricsData: result.lyrics });
-      if (completeStage) {
-        completeStage('lyrics');
-      }
-      voice.speak('Here are your lyrics. Let me read them to you.');
-    } catch (err) {
-      console.error('LyricsStage error:', err);
-      voice.speak('Sorry, couldn\'t generate lyrics right now.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Convert lyrics to text format for API
   const lyricsAsText = () => {
     if (!lyrics) return '';
@@ -321,6 +292,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       onNext={onNext}
       onBack={onBack}
       voice={voice}
+      nextDisabled={!lyrics}
     >
       <div className="stage-scroll-container">
         {!allowed && (
@@ -528,7 +500,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                Generate New Lyrics
+                Clear Lyrics
               </motion.button>
             </div>
           </div>
