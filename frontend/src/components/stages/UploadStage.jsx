@@ -126,10 +126,16 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
 
   // MVP PATCH: Handle progression to the next stage (Mix)
   const handleNextStage = async () => {
-    // 1. Trigger the Mix job on the backend
-    await api.startMix(sessionId, {}); // Send empty config/body to satisfy Body(...) requirement
-    // 2. Proceed to the next stage in the UI
-    onNext();
+    try {
+      // Fire the Mix job on the backend, but don't block navigation if it fails
+      await api.startMix(sessionId, {}); // Send empty config/body to satisfy Body(...) requirement
+    } catch (err) {
+      console.error("startMix failed, continuing to next stage anyway:", err);
+    } finally {
+      if (onNext) {
+        onNext();
+      }
+    }
   };
 
   return (

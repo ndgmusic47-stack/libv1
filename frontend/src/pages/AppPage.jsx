@@ -278,6 +278,12 @@ export default function AppPage() {
 
 
   const renderStage = () => {
+    const currentForNav = activeStage || currentStage;
+    const currentIndex = stageOrder.indexOf(currentForNav);
+
+    const isFirstStage = currentIndex <= 0;
+    const isLastStage = currentIndex === stageOrder.length - 1 && currentIndex >= 0;
+
     const commonProps = {
       openUpgradeModal,
       sessionId,
@@ -285,8 +291,10 @@ export default function AppPage() {
       updateSessionData,
       voice,
       onClose: handleClose,
-      onNext: goToNextStage,
-      onBack: goToPreviousStage,
+      // Hide Next on the last stage
+      onNext: isLastStage ? undefined : goToNextStage,
+      // Hide Back on the first stage
+      onBack: isFirstStage ? undefined : goToPreviousStage,
       completeStage: completeCurrentStage,
     };
 

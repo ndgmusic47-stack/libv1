@@ -228,13 +228,19 @@ body {
 
 .stage-footer {
   display: flex;
-  justify-content: flex-end;
-  padding: 0;
+  justify-content: space-between; /* Back left, Next right */
+  padding: 0 2vw;
   border-top: none;
   position: fixed;
-  right: 2vw;
+  left: 0;
+  right: 0;
   bottom: clamp(120px, 12vh, 160px);
   z-index: 40; /* NP22 */
+  pointer-events: none;
+}
+
+.stage-footer > * {
+  pointer-events: auto;
 }
 
 .stage-next-button {
