@@ -116,7 +116,7 @@ body {
   height: 100%;
   overflow-y: auto;
   padding: 1.5rem;
-  padding-bottom: 8rem; /* retained content padding; placement handled by footer/voice-controls */
+  padding-bottom: 8rem; /* retained content padding; placement handled by footer */
 }
 
 /* Mix Stage Content Panel - Visible surface for Mix UI */
@@ -169,16 +169,6 @@ body {
 .stage-wrapper {
   width: 100%;
   padding-bottom: 2rem;
-}
-
-/* Voice Controls */
-.voice-controls {
-  position: fixed;
-  bottom: 5vh;
-  right: 2vw;
-  z-index: 50; /* NP22 */
-  transform: scale(0.8);
-  pointer-events: auto;
 }
 
 /* Blocking layers - ensure they don't block clicks */
@@ -291,13 +281,6 @@ body {
     padding: 1rem;
   }
 
-  /* VoiceControl: smaller and slightly higher */
-  .voice-controls {
-    transform: scale(0.55);
-    bottom: 8vh;
-    right: 3vw;
-  }
-
   /* Stage Footer: center bottom */
   .stage-footer {
     left: 50%;
@@ -328,12 +311,6 @@ body {
   .mist-layer {
     height: 80vh;
     top: 10vh;
-  }
-  /* VoiceControl scale and position */
-  .voice-controls {
-    transform: scale(0.7);
-    bottom: 6vh;
-    right: 3vw;
   }
   /* Next button slightly inward */
   .stage-footer {

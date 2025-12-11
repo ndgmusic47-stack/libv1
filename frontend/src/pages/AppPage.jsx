@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Timeline from '../components/Timeline';
 import MistLayer from '../components/MistLayer';
-import VoiceControl from '../components/VoiceControl';
 import ErrorBoundary from '../components/ErrorBoundary';
 import BeatStage from '../components/stages/BeatStage';
 import LyricsStage from '../components/stages/LyricsStage';
@@ -351,8 +350,6 @@ export default function AppPage() {
           {renderStage()}
         </ErrorBoundary>
       </main>
-
-      <VoiceControl />
 
       {/* Analytics Dashboard */}
       <AnimatePresence>

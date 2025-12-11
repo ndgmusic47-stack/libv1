@@ -47,27 +47,35 @@ export default function StageWrapper({ title, icon, children, onClose, onNext, o
       {/* Back and Next Buttons */}
       {(onBack || onNext) && (
         <div className="stage-footer">
-          {onBack && (
-            <motion.button
-              onClick={onBack}
-              className="stage-next-button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              ← Back
-            </motion.button>
-          )}
-          {onNext && (
-            <motion.button
-              onClick={onNext}
-              className="stage-next-button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              style={{ marginLeft: onBack ? '1rem' : 0 }}
-            >
-              Next →
-            </motion.button>
-          )}
+          <div className="flex items-center justify-between w-full">
+            {/* Left side: Back or placeholder */}
+            {onBack ? (
+              <motion.button
+                type="button"
+                onClick={onBack}
+                className="stage-next-button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                ← Back
+              </motion.button>
+            ) : (
+              <div /> // Placeholder to keep layout stable
+            )}
+
+            {/* Right side: Next button */}
+            {onNext && (
+              <motion.button
+                type="button"
+                onClick={onNext}
+                className="stage-next-button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Next →
+              </motion.button>
+            )}
+          </div>
         </div>
       )}
     </div>
