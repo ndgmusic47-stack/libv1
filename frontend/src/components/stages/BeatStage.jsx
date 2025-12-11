@@ -170,7 +170,7 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
             </span>
           ) : (
             <span className={`text-xs block text-center ${credits <= 0 ? "text-red-400" : "text-emerald-400"}`}>
-              Beatoven credits: {credits}
+              Beat credits available: {credits}
             </span>
           )}
 
@@ -213,24 +213,23 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
               </audio>
               <div className="flex gap-2 mt-3">
                 <motion.button
-                  onClick={() => {
-                    // Play functionality handled by WavesurferPlayer
-                  }}
-                  className="flex-1 py-2 bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white font-poppins text-sm rounded-lg transition-colors"
-                >
-                  ▶️ Play
-                </motion.button>
-                <motion.button
                   onClick={async () => {
-                    // Use Beat functionality - advance stage and close
                     try {
-                      // Call backend to advance stage if available
-                      const next = await api.advanceStage(sessionId);
-                      voice.speak('Beat selected. Moving to the next step.');
+                      await api.advanceStage(sessionId);
+                      if (voice) {
+                        try {
+                          voice.speak('Beat selected. Moving to the next step.');
+                        } catch (err) {
+                          console.warn('Voice speak failed on Use Beat:', err);
+                        }
+                      }
                     } catch (err) {
-                      // Failed to advance stage
+                      console.error('Use Beat advanceStage error:', err);
                     }
-                    onClose(); // Close the fullscreen stage
+
+                    if (onNext) {
+                      onNext();
+                    }
                   }}
                   className="flex-1 py-2 bg-studio-red/80 hover:bg-studio-red text-studio-white font-poppins text-sm rounded-lg transition-colors"
                 >
@@ -244,7 +243,7 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
                   }}
                   className="flex-1 py-2 bg-studio-gray/50 hover:bg-studio-gray/70 text-studio-white font-poppins text-sm rounded-lg transition-colors"
                 >
-                  Generate Another
+                  Clear Beat
                 </motion.button>
               </div>
             </motion.div>

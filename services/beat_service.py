@@ -311,7 +311,7 @@ class BeatService:
                 else:
                     # Create silent audio clip as fallback
                     logger.info(f"Creating silent fallback beat at {fallback}")
-                    silent_audio = AudioSegment.silent(duration=60000)  # 60 seconds
+                    silent_audio = AudioSegment.silent(duration=180000)  # 180 seconds
                     silent_audio.export(str(fallback), format="mp3")
             
             # Copy fallback to session
@@ -322,7 +322,7 @@ class BeatService:
             
             # Update project memory
             memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
-            demo_metadata = {"duration": 60, "bpm": bpm or 120, "key": "C"}
+            demo_metadata = {"duration": 180, "bpm": bpm or 120, "key": "C"}
             await memory.update_metadata(tempo=bpm or 120, mood=mood, genre=genre)
             beat_url = f"/media/{session_id}/beat.mp3"
             await memory.add_asset("beat", beat_url, {"bpm": bpm or 120, "mood": mood, "source": "demo", "metadata": demo_metadata})
@@ -363,11 +363,11 @@ class BeatService:
             logger.error(f"Fallback beat creation failed: {e} - creating silent audio in session")
             try:
                 output_file = session_path / "beat.mp3"
-                silent_audio = AudioSegment.silent(duration=(duration_sec or 60) * 1000)
+                silent_audio = AudioSegment.silent(duration=(duration_sec or 180) * 1000)
                 silent_audio.export(str(output_file), format="mp3")
                 
                 memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
-                silent_metadata = {"duration": duration_sec or 60, "bpm": bpm or 120, "key": "C"}
+                silent_metadata = {"duration": duration_sec or 180, "bpm": bpm or 120, "key": "C"}
                 await memory.update_metadata(tempo=bpm or 120, mood=mood, genre=genre)
                 beat_url = f"/media/{session_id}/beat.mp3"
                 await memory.add_asset("beat", beat_url, {"bpm": bpm or 120, "mood": mood, "source": "silent_fallback", "metadata": silent_metadata})
