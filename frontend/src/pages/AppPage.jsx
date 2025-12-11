@@ -9,6 +9,7 @@ import UploadStage from '../components/stages/UploadStage';
 import MixStage from '../components/stages/MixStage';
 import ReleaseStage from '../components/stages/ReleaseStage';
 import ContentStage from '../components/stages/ContentStage';
+import StageWrapper from '../components/stages/StageWrapper';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import ManageProjectsModal from '../components/ManageProjectsModal';
 import UpgradeModal from '../components/UpgradeModal';
@@ -321,7 +322,21 @@ export default function AppPage() {
       case 'content':
         return <ContentStage {...commonProps} />;
       case 'analytics':
-        return <AnalyticsDashboard {...commonProps} />;
+        return (
+          <StageWrapper
+            title="Analytics"
+            icon="📊"
+            onBack={goToPreviousStage}
+            onClose={handleClose}
+            voice={voice}
+          >
+            <AnalyticsDashboard
+              sessionId={sessionId}
+              projectId={currentProjectId}
+              sessionData={sessionData}
+            />
+          </StageWrapper>
+        );
       default:
         return null;
     }
