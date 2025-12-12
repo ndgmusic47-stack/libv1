@@ -113,11 +113,13 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
   const [refineText, setRefineText] = useState('');
   // V18.1: Conversation history tracking
   const [history, setHistory] = useState([]);
+  const [error, setError] = useState('');
 
   // Initialize lyrics from sessionData on mount
   useEffect(() => {
     if (sessionData && sessionData.lyricsData && !lyrics) {
       setLyrics(sessionData.lyricsData);
+      setError('');
     }
   }, [sessionData, lyrics]);
 
@@ -128,17 +130,23 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
     const hasTheme = !!(theme && theme.trim().length > 0);
 
     if (!hasSessionBeat && !hasTheme) {
-      voice.speak('Please provide a theme or create a beat first.');
+      setError('Enter a theme or select a beat to generate lyrics.');
+      if (voice && voice.speak) {
+        voice.speak('Please provide a theme or create a beat first.');
+      }
       return;
     }
 
     setLoading(true);
+    setError('');
 
     try {
       let result;
 
       if (hasSessionBeat) {
-        voice.speak('Generating lyrics from your session beat...');
+        if (voice && voice.speak) {
+          voice.speak('Generating lyrics from your session beat...');
+        }
         
         // Fetch the beat blob
         const response = await fetch(sessionData.beatFile);
@@ -148,22 +156,37 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
         formData.append("file", blob, "session-beat.wav");
 
         result = await api.generateLyricsFromBeat(formData, sessionId);
-        voice.speak('Here are your lyrics based on the session beat.');
+        if (voice && voice.speak) {
+          voice.speak('Here are your lyrics based on the session beat.');
+        }
       } else {
-        voice.speak(`Writing lyrics about ${theme}...`);
+        if (voice && voice.speak) {
+          voice.speak(`Writing lyrics about ${theme}...`);
+        }
         
         result = await api.generateFreeLyrics(theme, sessionId);
-        voice.speak('Here are your free lyrics.');
+        if (voice && voice.speak) {
+          voice.speak('Here are your free lyrics.');
+        }
+      }
+
+      if (!result || !result.lyrics || !String(result.lyrics).trim()) {
+        setError('No lyrics were returned. Try a different theme or try again.');
+        return;
       }
 
       setLyrics(result.lyrics);
       updateSessionData({ lyricsData: result.lyrics });
+      setError('');
       if (completeStage) {
         completeStage('lyrics');
       }
     } catch (err) {
       console.error('LyricsStage error:', err);
-      voice.speak('Sorry, couldn\'t generate lyrics right now.');
+      setError('Lyrics generation failed. Check your connection and try again.');
+      if (voice && voice.speak) {
+        voice.speak('Sorry, couldn\'t generate lyrics right now.');
+      }
     } finally {
       setLoading(false);
     }
@@ -214,10 +237,10 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       setLyrics(result.lyrics);
       updateSessionData({ lyricsData: result.lyrics });
       setRefineText('');
-      voice.speak("Here are your refined lyrics.");
+      if (voice && voice.speak) voice.speak("Here are your refined lyrics.");
     } catch (err) {
       console.error('LyricsStage error:', err);
-      voice.speak("Could not refine lyrics right now.");
+      if (voice && voice.speak) voice.speak("Could not refine lyrics right now.");
     } finally {
       setLoading(false);
     }
@@ -233,7 +256,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       onNext={onNext}
       onBack={onBack}
       voice={voice}
-      nextDisabled={!lyrics}
+      nextDisabled={false}
     >
       <div className="stage-scroll-container">
         {!lyrics ? (
@@ -264,16 +287,26 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
                 />
               </div>
 
-              <motion.button
-                onClick={handleGenerateLyrics}
-                disabled={loading || (!sessionData?.beatFile && !theme?.trim())}
-                className="w-full py-4 bg-studio-red hover:bg-studio-red/80 disabled:bg-studio-gray
-                         text-studio-white font-montserrat font-semibold rounded-lg"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                {loading ? 'Generating...' : 'Generate Lyrics'}
-              </motion.button>
+              <div className="w-full">
+                <motion.button
+                  onClick={handleGenerateLyrics}
+                  disabled={loading || (!sessionData?.beatFile && !theme?.trim())}
+                  className="w-full py-4 bg-studio-red hover:bg-studio-red/80 disabled:bg-studio-gray
+                           text-studio-white font-montserrat font-semibold rounded-lg"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {loading ? 'Generating...' : 'Generate Lyrics'}
+                </motion.button>
+                {(!sessionData?.beatFile && !theme?.trim()) && (
+                  <div className="text-xs text-studio-white/60 mt-2 text-center">
+                    Add a theme (or use your beat) to enable generation.
+                  </div>
+                )}
+                {error && (
+                  <div className="text-sm text-red-400 mt-2">{error}</div>
+                )}
+              </div>
             </div>
           </div>
         ) : (
