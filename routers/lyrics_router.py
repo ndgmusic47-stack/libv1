@@ -12,7 +12,7 @@ from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
 
 # Create router
-lyrics_router = APIRouter(prefix="/lyrics", tags=["Lyrics & Songwriting"])
+lyrics_router = APIRouter(prefix="/api/lyrics", tags=["Lyrics & Songwriting"])
 
 # Request models
 class SongRequest(BaseModel):

@@ -14,7 +14,7 @@ async def get_project(session_id: str, db: AsyncSession = Depends(get_db)):
     Minimal endpoint to fetch or create project memory for a session.
     Used by frontend api.getProject / syncProject.
     """
-    project = await get_or_create_project_memory(session_id=session_id, media_dir=MEDIA_DIR, user_id=None, db=db)
+    project = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
     return {"ok": True, "project": project.project_data}
 
 
@@ -31,10 +31,10 @@ async def advance_project(session_id: str, db: AsyncSession = Depends(get_db)):
         project = await advance_workflow_stage(session_id=session_id, db=db)
     except ImportError:
         # Fallback: just return the existing project memory
-        project = await get_or_create_project_memory(session_id=session_id, media_dir=MEDIA_DIR, user_id=None, db=db)
+        project = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
     except Exception:
         # If anything goes wrong, fail soft for MVP
-        project = await get_or_create_project_memory(session_id=session_id, media_dir=MEDIA_DIR, user_id=None, db=db)
+        project = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
 
     return {"ok": True, "project": project.project_data}
 
