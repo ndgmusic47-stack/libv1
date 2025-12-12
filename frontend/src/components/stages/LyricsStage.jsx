@@ -152,7 +152,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       } else {
         voice.speak(`Writing lyrics about ${theme}...`);
         
-        result = await api.generateFreeLyrics(theme);
+        result = await api.generateFreeLyrics(theme, sessionId);
         voice.speak('Here are your free lyrics.');
       }
 
@@ -204,7 +204,8 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
         sessionData.bpm,
         historyToSend,
         structuredLyrics,
-        rhythmMap
+        rhythmMap,
+        sessionId
       );
       
       // V18.1: Update history after successful refinement
@@ -232,6 +233,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       onNext={onNext}
       onBack={onBack}
       voice={voice}
+      nextDisabled={!lyrics}
     >
       <div className="stage-scroll-container">
         {!lyrics ? (

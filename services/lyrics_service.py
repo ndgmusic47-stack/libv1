@@ -348,7 +348,7 @@ Make it authentic and emotionally resonant."""
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     
-    async def generate_free_lyrics(self, theme: str) -> Dict[str, Any]:
+    async def generate_free_lyrics(self, theme: str, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Generate NP22-style lyrics from theme only.
         
@@ -357,9 +357,27 @@ Make it authentic and emotionally resonant."""
         """
         lyrics_text = self.generate_np22_lyrics(theme=theme, bpm=None, mood=None)
         
-        log_endpoint_event("/lyrics/free", None, "success", {"theme": theme})
+        # Persist lyrics to project memory if session_id provided
+        if session_id:
+            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
+            if "lyrics" not in memory.project_data:
+                memory.project_data["lyrics"] = {}
+            memory.project_data["lyrics"].update({
+                "text": lyrics_text,
+                "meta": {},
+                "completed": True
+            })
+            # Also set lyrics_text if it exists as a convention
+            if "lyrics_text" in memory.project_data:
+                memory.project_data["lyrics_text"] = lyrics_text
+            await memory.save()
         
-        return {"lyrics": lyrics_text}
+        log_endpoint_event("/lyrics/free", session_id, "success", {"theme": theme})
+        
+        result = {"lyrics": lyrics_text}
+        if session_id:
+            result["session_id"] = session_id
+        return result
     
     async def refine_lyrics(
         self,
@@ -368,7 +386,8 @@ Make it authentic and emotionally resonant."""
         bpm: Optional[int] = None,
         history: Optional[List[dict]] = None,
         structured_lyrics: Optional[Dict[str, str]] = None,
-        rhythm_map: Optional[Dict[str, Any]] = None
+        rhythm_map: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Refine, rewrite, or extend lyrics based on user instructions.
@@ -449,10 +468,25 @@ Rewrite the lyrics according to the instruction while maintaining NP22 style. Re
             
             refined_lyrics = response.choices[0].message.content.strip() if response.choices[0].message.content else fallback_lyrics
             
-            log_endpoint_event("/lyrics/refine", None, "success", {"instruction_length": len(instruction), "bpm": bpm})
+            # Persist refined lyrics to project memory if session_id provided
+            if session_id:
+                memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
+                if "lyrics" not in memory.project_data:
+                    memory.project_data["lyrics"] = {}
+                memory.project_data["lyrics"].update({
+                    "text": refined_lyrics,
+                    "meta": {},
+                    "completed": True
+                })
+                # Also set lyrics_text if it exists as a convention
+                if "lyrics_text" in memory.project_data:
+                    memory.project_data["lyrics_text"] = refined_lyrics
+                await memory.save()
+            
+            log_endpoint_event("/lyrics/refine", session_id, "success", {"instruction_length": len(instruction), "bpm": bpm})
             return {"lyrics": refined_lyrics}
         except Exception as e:
             logger.warning(f"OpenAI lyrics refinement failed: {e} - returning original lyrics")
-            log_endpoint_event("/lyrics/refine", None, "error", {"error": str(e)})
+            log_endpoint_event("/lyrics/refine", session_id, "error", {"error": str(e)})
             raise Exception(f"Failed to refine lyrics: {str(e)}")
 

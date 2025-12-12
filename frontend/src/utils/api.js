@@ -211,18 +211,18 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
  },
 
  // V17: Generate free lyrics from theme
- generateFreeLyrics: async (theme) => {
+ generateFreeLyrics: async (theme, sessionId = null) => {
    const response = await fetch(`${API_BASE}/lyrics/free`, {
      method: 'POST',
      credentials: "include",
      headers: { 'Content-Type': 'application/json' },
-     body: JSON.stringify({ theme }),
+     body: JSON.stringify({ theme, session_id: sessionId }),
    });
    return handleResponse(response);
  },
 
  // V18.1: Refine lyrics based on user instruction with history and metadata
- refineLyrics: async (lyricsText, instruction, bpm = null, history = [], structuredLyrics = null, rhythmMap = null) => {
+ refineLyrics: async (lyricsText, instruction, bpm = null, history = [], structuredLyrics = null, rhythmMap = null, sessionId = null) => {
    const response = await fetch(`${API_BASE}/lyrics/refine`, {
      method: 'POST',
      credentials: "include",
@@ -233,7 +233,8 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
        bpm,
        history,
        structured_lyrics: structuredLyrics,
-       rhythm_map: rhythmMap
+       rhythm_map: rhythmMap,
+       session_id: sessionId
      }),
    });
    return handleResponse(response);
@@ -666,6 +667,25 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
        if (project.metadata.genre) updates.genre = project.metadata.genre;
        if (project.metadata.track_title) updates.trackTitle = project.metadata.track_title;
        if (project.metadata.artist_name) updates.artistName = project.metadata.artist_name;
+     }
+     
+     // Sync lyrics
+     if (project.lyrics?.text) {
+       updates.lyricsData = project.lyrics.text;
+     } else if (project.lyrics_text) {
+       updates.lyricsData = project.lyrics_text;
+     } else if (project.assets?.lyrics?.url) {
+       // Fetch lyrics from URL if available
+       try {
+         const response = await fetch(project.assets.lyrics.url);
+         if (response.ok) {
+           const lyricsText = await response.text();
+           updates.lyricsData = lyricsText;
+         }
+       } catch (err) {
+         // Fail silently - don't crash syncProject
+         console.warn('Failed to fetch lyrics from URL:', err);
+       }
      }
      
      if (Object.keys(updates).length > 0 && updateSessionData) {

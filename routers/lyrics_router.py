@@ -24,6 +24,7 @@ class SongRequest(BaseModel):
 
 class FreeLyricsRequest(BaseModel):
     theme: str = Field(..., description="Theme for the lyrics")
+    session_id: Optional[str] = Field(None, description="Optional session ID for persistence")
 
 class LyricRefineRequest(BaseModel):
     lyrics: str = Field(..., description="Full current lyrics as text")
@@ -32,6 +33,7 @@ class LyricRefineRequest(BaseModel):
     history: Optional[List[dict]] = Field(default=[], description="V18.1: Recent conversation history (last 3 interactions)")
     structured_lyrics: Optional[dict] = Field(default=None, description="V18.1: Structured lyrics object with sections")
     rhythm_map: Optional[dict] = Field(default=None, description="V18.1: Rhythm approximation map per section")
+    session_id: Optional[str] = Field(None, description="Optional session ID for persistence")
 
 # Service instance
 lyrics_service = LyricsService()
@@ -166,13 +168,13 @@ async def generate_lyrics_from_beat(
 async def generate_free_lyrics(request: FreeLyricsRequest):
     """V17: Generate NP22-style lyrics from theme only"""
     try:
-        result = await lyrics_service.generate_free_lyrics(theme=request.theme)
+        result = await lyrics_service.generate_free_lyrics(theme=request.theme, session_id=request.session_id)
         return success_response(
             data=result,
             message="Lyrics generated"
         )
     except Exception as e:
-        log_endpoint_event("/lyrics/free", None, "error", {"error": str(e)})
+        log_endpoint_event("/lyrics/free", request.session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to generate lyrics",
             status_code=500,
@@ -190,14 +192,15 @@ async def refine_lyrics(request: LyricRefineRequest):
             bpm=request.bpm,
             history=request.history,
             structured_lyrics=request.structured_lyrics,
-            rhythm_map=request.rhythm_map
+            rhythm_map=request.rhythm_map,
+            session_id=request.session_id
         )
         return success_response(
             data=result,
             message="Lyrics refined"
         )
     except Exception as e:
-        log_endpoint_event("/lyrics/refine", None, "error", {"error": str(e)})
+        log_endpoint_event("/lyrics/refine", request.session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to refine lyrics",
             status_code=500,
