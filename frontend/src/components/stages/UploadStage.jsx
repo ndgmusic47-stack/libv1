@@ -91,9 +91,6 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
         vocalUploaded: true
       });
       
-      // Sync with backend project state to get vocalFile from project.assets.stems[0].url
-      await api.syncProject(sessionId, updateSessionData);
-      
       // V20: Auto-complete upload stage
       if (completeStage) {
         completeStage('upload');

@@ -1,6 +1,25 @@
 // Use backend proxy via Vite dev server
 const API_BASE = '/api';
 
+// Helper to normalize media URLs consistently
+const normalizeMediaUrl = (url) => {
+  if (!url) return url;
+  
+  // If already has /api/media/, return as-is
+  if (url.startsWith('/api/media/')) return url;
+  
+  // If starts with /media/, prepend API_BASE if needed
+  if (url.startsWith('/media/')) {
+    if (API_BASE === '/api' || API_BASE.startsWith('/api')) {
+      return `${API_BASE}${url}`;
+    }
+    return url;
+  }
+  
+  // Otherwise return as-is
+  return url;
+};
+
 // Phase 2.2: Helper to handle standardized JSON responses {ok, data, message} or {ok, error}
 // Phase 8.4: Preserve error data for paywall checks
 const handleResponse = async (response) => {
@@ -638,16 +657,13 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
       // Vocal file - prioritize project.assets.vocals[0], fallback to project.assets.stems[0]
       if (project.assets.vocals && project.assets.vocals.length > 0) {
         const vocal = project.assets.vocals[0];
-        if (vocal.url) {
-          updates.vocalFile = vocal.url;
-        } else if (vocal.path) {
-          // Convert path to URL if path exists but url doesn't
-          // If path starts with /media, prepend /api; otherwise use path as-is
-          updates.vocalFile = vocal.path.startsWith('/media') ? `/api${vocal.path}` : vocal.path;
+        const chosenValue = vocal.url || vocal.path;
+        if (chosenValue) {
+          updates.vocalFile = normalizeMediaUrl(chosenValue);
         }
       } else if (project.assets.stems && project.assets.stems.length > 0 && project.assets.stems[0]?.url) {
         // Fallback to stems for backward compatibility
-        updates.vocalFile = project.assets.stems[0].url;
+        updates.vocalFile = normalizeMediaUrl(project.assets.stems[0].url);
       }
        
        // Mix file from project.assets.mix?.url

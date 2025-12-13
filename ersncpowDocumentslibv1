@@ -1,0 +1,144 @@
+[33mcommit ccc5c97a634054dc80a02a3370db2d539bb50bf4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: ndgmusic47-stack <ndgmusic47@gmail.com>
+Date:   Sat Dec 13 22:06:11 2025 +0000
+
+    Short clear description of change
+
+[1mdiff --git a/INVESTIGATION_REPORT.md b/INVESTIGATION_REPORT.md[m
+[1mindex 399c8b9..8b13789 100644[m
+[1m--- a/INVESTIGATION_REPORT.md[m
+[1m+++ b/INVESTIGATION_REPORT.md[m
+[36m@@ -1,386 +1 @@[m
+[31m-# Label-in-a-Box MVP Investigation Report[m
+[31m-[m
+[31m-**Date:** Investigation performed on current codebase state  [m
+[31m-**Purpose:** Factual status report of what works, what's broken, and why  [m
+[31m-**Scope:** Full-stack investigation (Frontend React + Backend FastAPI)[m
+[31m-[m
+[31m----[m
+[31m-[m
+[31m-## 1. Architecture Map[m
+[31m-[m
+[31m-### Frontend:[m
+[31m-- **Entry Point:** `frontend/src/main.jsx` → `App.jsx` → `AppPage.jsx`[m
+[31m-- **State Management:** [m
+[31m-  - `ProjectContext.jsx` - Global project state via React Context[m
+[31m-  - `AppPage.jsx` - Local state for `currentStage`, `activeStage`, `completedStages`, `sessionData`[m
+[31m-- **Stage Components:** [m
+[31m-  - `BeatStage.jsx` - Beat generation (working)[m
+[31m-  - `LyricsStage.jsx` - Lyrics generation (BROKEN - see Section 2)[m
+[31m-  - `UploadStage.jsx` - Vocal upload[m
+[31m-  - `MixStage.jsx` - Audio mixing[m
+[31m-  - `ReleaseStage.jsx` - Release pack generation[m
+[31m-  - `ContentStage.jsx` - Content/viral module[m
+[31m-- **Navigation:** [m
+[31m-  - `Timeline.jsx` - Visual timeline with stage icons[m
+[31m-  - `StageWrapper.jsx` - Common wrapper with Next/Previous buttons[m
+[31m-  - Navigation logic in `AppPage.jsx` (`goToNextStage`, `handleStageClick`)[m
+[31m-- **API Layer:** `frontend/src/utils/api.js` - All backend communication[m
+[31m-- **Key Hooks:** `useVoice.js`, `useTransport.ts`, `useMultiTrackWaveform.ts`, `useTimelineZoomPan.ts`[m
+[31m-[m
+[31m-### Backend:[m
+[31m-- **Main App:** `main.py` - FastAPI application with middleware (CORS, security headers, rate limiting, exception handling)[m
+[31m-- **Routers (all included in main.py):**[m
+[31m-  - `routers/beat_router.py` - `/beats/*` - Beat generation endpoints[m
+[31m-  - `routers/lyrics_router.py` - `/lyrics/*` and `/songs/write` - Lyrics generation[m
+[31m-  - `routers/media_router.py` - `/media/*` - File uploads[m
+[31m-  - `routers/mix_router.py` - `/mix/*` - Mixing endpoints[m
+[31m-  - `routers/mix_config_router.py` - `/api/mix/*` - Mix configuration[m
+[31m-  - `routers/release_router.py` - `/api/release/*` - Release pack generation[m
+[31m-  - `routers/content_router.py` - `/api/content/*` - Content/viral module[m
+[31m-  - `routers/analytics_router.py` - Analytics endpoints[m
+[31m-  - `routers/billing_router.py` - Stripe billing[m
+[31m-  - `routers/social_router.py` - Social media scheduling[m
+[31m-- **Services:** `services/*.py` - Business logic (beat_service, lyrics_service, mix_service, etc.)[m
+[31m-- **Project Memory:** `project_memory.py` - Persistent project state (JSON files + SQLite)[m
+[31m-- **Database:** `database.py` + `database_models.py` - SQLite with async SQLAlchemy[m
+[31m-- **DSP Engine:** `utils/dsp/*.py` - Audio processing (pydub, librosa, scipy)[m
+[31m-[m
+[31m-### Legacy / Unclear:[m
+[31m-- Multiple report files (`PHASE_*_REPORT.md`) - Historical documentation, not code[m
+[31m-- `render.yaml` - Deployment config (may be outdated)[m
+[31m-- `RENDER_DEPLOYMENT_INVESTIGATION.md` - Deployment notes[m
+[31m-- `analytics_engine.py` - Standalone file, unclear if used[m
+[31m-- `social_scheduler.py` - Standalone file, unclear if used[m
+[31m-[m
+[31m----[m
+[31m-[m
+[31m-## 2. Frontend Functional Status[m
+[31m-[m
+[31m-### Navigation (Next/Previous):[m
+[31m-- **Current behavior:**[m
+[31m-  - `StageWrapper.jsx` provides "Next →" button that calls `onNext` prop[m
+[31m-  - `AppPage.jsx` implements `goToNextStage()` which finds next stage in `stageOrder` array[m
+[31m-  - Navigation works by setting `activeStage` state, which triggers `renderStage()` to show the correct component[m
+[31m-- **Errors seen:**[m
+[31m-  - No obvious errors in navigation logic itself[m
+[31m-  - However, navigation can fail if the target stage component crashes (see LyricsStage below)[m
+[31m-- **Files involved:**[m
+[31m-  - `frontend/src/pages/AppPage.jsx` (lines 130-136, 106-128)[m
+[31m-  - `frontend/src/components/stages/StageWrapper.jsx` (lines 48-59)[m
+[31m-  - `frontend/src/components/Timeline.jsx` (stage click handlers)[m
+[31m-[m
+[31m-### Lyrics Module:[m
+[31m-- **Current behavior:**[m
+[31m-  - Component renders initially but **CRASHES IMMEDIATELY** due to undefined variables[m
+[31m-  - Three generation modes: "Generate Lyrics From Beat", "Generate Free Lyrics", "Generate Lyrics From Session Beat"[m
+[31m-  - Refinement feature available after lyrics are generated[m
+[31m-- **Errors seen:**[m
+[31m-  - **CRITICAL BUG:** `LyricsStage.jsx` references `allowed` and `message` variables that are NEVER DEFINED[m
+[31m-    - Line 148: `if (!allowed)` - `allowed` is undefined[m
+[31m-    - Line 179: `if (!allowed)` - `allowed` is undefined[m
+[31m-    - Line 216: `if (!allowed)` - `allowed` is undefined[m
+[31m-    - Line 259: `if (!allowed)` - `allowed` is undefined[m
+[31m-    - Line 318: `{!allowed && (` - `allowed` is undefined[m
+[31m-    - Line 321: `{message}` - `message` is undefined[m
+[31m-  - This causes a `ReferenceError` when the component renders, triggering React ErrorBoundary[m
+[31m-  - ErrorBoundary shows "Try Again" button (line 58 in `ErrorBoundary.jsx`)[m
+[31m-  - This explains the "error, try again" notification the user sees[m
+[31m-- **Files involved:**[m
+[31m-  - `frontend/src/components/stages/LyricsStage.jsx` (BROKEN - missing variable definitions)[m
+[31m-  - `frontend/src/components/ErrorBoundary.jsx` (catches the crash)[m
+[31m-  - `frontend/src/utils/api.js` (API calls: `generateLyrics`, `generateLyricsFromBeat`, `generateFreeLyrics`, `refineLyrics`)[m
+[31m-[m
+[31m-### Other modules (Upload, Mix, Cover, Release):[m
+[31m-- **Upload Stage:**[m
+[31m-  - Renders correctly (`allowed = true` is defined on line 8)[m
+[31m-  - File upload validation works[m
+[31m-  - API call to `/api/media/upload/vocal` should work if backend is running[m
+[31m-- **Mix Stage:**[m
+[31m-  - Renders correctly[m
+[31m-  - Uses `startMix`, `getMixStatus`, `getMixPreview` API functions[m
+[31m-  - Polls for mix job status every 1.5 seconds[m
+[31m-  - Depends on `vocalFile` and `beatFile` being present in `sessionData`[m
+[31m-- **Release Stage:**[m
+[31m-  - Renders correctly (`allowed = true` is defined on line 7)[m
+[31m-  - Multiple API calls for cover generation, metadata, lyrics PDF, release pack[m
+[31m-- **Content Stage:**[m
+[31m-  - Renders correctly[m
+[31m-  - Uses content service endpoints[m
+[31m-[m
+[31m-### Key console/network errors:[m
+[31m-- **Primary Error:** `ReferenceError: allowed is not defined` in `LyricsStage.jsx`[m
+[31m-- **Secondary:** Any API calls from LyricsStage will fail because component crashes before they can execute[m
+[31m-- **Network:** No network errors observed in code inspection, but LyricsStage never reaches API call stage due to crash[m
+[31m-[m
+[31m----[m
+[31m-[m
+[31m-## 3. Backend Functional Status[m
+[31m-[m
+[31m-### Endpoints map:[m
+[31m-[m
+[31m-#### Beat:[m
+[31m-- **File:** `routers/beat_router.py`[m
+[31m-- **Routes:**[m
+[31m-  - `POST /beats/create` - Create beat (working - user confirmed)[m
+[31m-  - `GET /beats/credits` - Get Beatoven credits[m
+[31m-  - `GET /beats/status/{job_id}` - Get beat job status[m
+[31m-- **Status:** ✅ Working (user confirmed beat generation works)[m
+[31m-[m
+[31m-#### Lyrics:[m
+[31m-- **File:** `routers/lyrics_router.py`[m
+[31m-- **Routes:**[m
+[31m-  - `POST /songs/write` - Generate lyrics (genre, mood, theme) - **NOTE:** Path is `/songs/write`, not `/lyrics/write`[m
+[31m-  - `POST /lyrics/from_beat` - Generate lyrics from uploaded beat fil
