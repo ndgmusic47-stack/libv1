@@ -2,21 +2,17 @@
 const API_BASE = '/api';
 
 // Helper to normalize media URLs consistently
-const normalizeMediaUrl = (url) => {
+export const normalizeMediaUrl = (url) => {
   if (!url) return url;
-  
-  // If already has /api/media/, return as-is
+
   if (url.startsWith('/api/media/')) return url;
-  
-  // If starts with /media/, prepend API_BASE if needed
+
   if (url.startsWith('/media/')) {
-    if (API_BASE === '/api' || API_BASE.startsWith('/api')) {
-      return `${API_BASE}${url}`;
-    }
-    return url;
+    // Only rewrite in local dev where the frontend needs the /api proxy
+    if (import.meta?.env?.DEV) return `/api${url}`;
+    return url; // prod serves /media directly
   }
-  
-  // Otherwise return as-is
+
   return url;
 };
 
