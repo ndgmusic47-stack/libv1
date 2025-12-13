@@ -635,10 +635,20 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
          updates.beatFile = project.assets.beat.url;
        }
        
-       // Vocal file from project.assets.stems[0]?.url
-       if (project.assets.stems && project.assets.stems.length > 0 && project.assets.stems[0]?.url) {
-         updates.vocalFile = project.assets.stems[0].url;
-       }
+      // Vocal file - prioritize project.assets.vocals[0], fallback to project.assets.stems[0]
+      if (project.assets.vocals && project.assets.vocals.length > 0) {
+        const vocal = project.assets.vocals[0];
+        if (vocal.url) {
+          updates.vocalFile = vocal.url;
+        } else if (vocal.path) {
+          // Convert path to URL if path exists but url doesn't
+          // If path starts with /media, prepend /api; otherwise use path as-is
+          updates.vocalFile = vocal.path.startsWith('/media') ? `/api${vocal.path}` : vocal.path;
+        }
+      } else if (project.assets.stems && project.assets.stems.length > 0 && project.assets.stems[0]?.url) {
+        // Fallback to stems for backward compatibility
+        updates.vocalFile = project.assets.stems[0].url;
+      }
        
        // Mix file from project.assets.mix?.url
        if (project.assets.mix?.url) {
