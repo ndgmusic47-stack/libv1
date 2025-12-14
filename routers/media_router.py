@@ -1,6 +1,7 @@
 """
 Media router for file upload and file handling endpoints
 """
+import json
 import uuid
 import logging
 import asyncio
@@ -134,8 +135,8 @@ async def generate_vocal(
         voice_result = await asyncio.to_thread(gtts_speak, "nova", text, session_id, None)
         
         # gtts_speak returns JSONResponse (success_response/error_response). Normalize to dict.
-        if hasattr(voice_result, "content") and isinstance(voice_result.content, dict):
-            voice_result = voice_result.content
+        if hasattr(voice_result, "body"):
+            voice_result = json.loads(voice_result.body.decode("utf-8"))
         
         # Check if gtts_speak returned an error
         if not isinstance(voice_result, dict) or not voice_result.get("ok"):
