@@ -13,7 +13,6 @@ import StageWrapper from '../components/stages/StageWrapper';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import ManageProjectsModal from '../components/ManageProjectsModal';
 import UpgradeModal from '../components/UpgradeModal';
-import { useVoice } from '../hooks/useVoice';
 import { api } from '../utils/api';
 import '../styles/ErrorBoundary.css';
 
@@ -41,8 +40,6 @@ export default function AppPage() {
     mood: 'energetic',
     trackTitle: 'My Track',
   });
-
-  const voice = useVoice(sessionId);
 
   // NP22: Global stage order for full workflow
   const stageOrder = [
@@ -94,9 +91,6 @@ export default function AppPage() {
     if (currentIndex < stageOrder.length - 1) {
       const nextStage = stageOrder[currentIndex + 1];
       setCurrentStage(nextStage);
-      voice.speak(`${stage} stage complete! ${nextStage} is next`);
-    } else {
-      voice.speak(`${stage} complete! All stages finished!`);
     }
   };
 
@@ -108,7 +102,6 @@ export default function AppPage() {
     setActiveStage(stageId);
     setIsStageOpen(true);
     window.scrollTo({ top: 0, behavior: 'instant' });
-    voice.stopSpeaking();
   };
 
   const handleClose = () => {
@@ -125,7 +118,6 @@ export default function AppPage() {
     setActiveStage(stageId);
     setIsStageOpen(true);
     window.scrollTo({ top: 0, behavior: 'instant' });
-    voice.stopSpeaking();
   };
 
   const goToNextStage = () => {
@@ -184,7 +176,6 @@ export default function AppPage() {
 
   const handleAnalyticsClick = () => {
     setShowAnalytics(true);
-    voice.stopSpeaking();
   };
 
   const openUpgradeModal = (feature) => {
@@ -290,7 +281,6 @@ export default function AppPage() {
       sessionId,
       sessionData,
       updateSessionData,
-      voice,
       onClose: handleClose,
       // Hide Next on the last stage
       onNext: isLastStage ? undefined : goToNextStage,
@@ -328,7 +318,6 @@ export default function AppPage() {
             icon="📊"
             onBack={goToPreviousStage}
             onClose={handleClose}
-            voice={voice}
           >
             <AnalyticsDashboard
               sessionId={sessionId}
@@ -373,7 +362,6 @@ export default function AppPage() {
           <ErrorBoundary onReset={() => setShowAnalytics(false)}>
             <AnalyticsDashboard
               sessionId={sessionId}
-              voice={voice}
               onClose={handleAnalyticsClose}
             />
           </ErrorBoundary>

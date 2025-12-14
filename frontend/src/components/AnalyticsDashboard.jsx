@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api } from '../utils/api';
 
-export default function AnalyticsDashboard({ sessionId, voice, onClose }) {
+export default function AnalyticsDashboard({ sessionId, onClose }) {
   const [viewMode, setViewMode] = useState('project'); // 'project' or 'dashboard'
   const [loading, setLoading] = useState(false);
   const [projectAnalytics, setProjectAnalytics] = useState(null);
@@ -24,10 +24,8 @@ export default function AnalyticsDashboard({ sessionId, voice, onClose }) {
       const result = await api.getProjectAnalytics(sessionId);
       setProjectAnalytics(result.analytics);
       setInsights(result.insights || []);
-      voice.speak('Your project analytics are ready.');
     } catch (err) {
       console.error('Failed to load analytics:', err);
-      voice.speak('Failed to load analytics data');
     } finally {
       setLoading(false);
     }
@@ -40,10 +38,8 @@ export default function AnalyticsDashboard({ sessionId, voice, onClose }) {
       const result = await api.getDashboardAnalytics();
       setDashboardData(result.dashboard);
       setInsights(result.insights || []);
-      voice.speak('Your dashboard analytics are ready.');
     } catch (err) {
       console.error('Failed to load dashboard:', err);
-      voice.speak('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }

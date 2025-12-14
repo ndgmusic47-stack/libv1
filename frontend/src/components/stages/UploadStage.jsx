@@ -2,9 +2,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { api, normalizeMediaUrl } from '../../utils/api';
 import StageWrapper from './StageWrapper';
-import WavesurferPlayer from '../WavesurferPlayer';
 
-export default function UploadStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
+export default function UploadStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, onClose, onNext, onBack, completeStage }) {
   const allowed = true; // No auth - always allowed
 
   const [dragging, setDragging] = useState(false);
@@ -44,19 +43,16 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
         const validation = validateAudioFile(audioFile);
         if (!validation.valid) {
           setError(validation.error);
-          voice.speak('There was a problem uploading your vocal file.');
           return;
         }
         await uploadFile(audioFile);
       } else {
         setError('Please drop an audio file (.wav, .mp3, .aiff)');
-        voice.speak('Please drop an audio file');
       }
     } catch (err) {
       setError(err.message || 'An error occurred');
-      voice.speak('There was a problem uploading your vocal file.');
     }
-  }, [sessionId, voice]);
+  }, [sessionId]);
 
   const uploadFile = async (file) => {
     if (!allowed) {
@@ -72,12 +68,9 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       const validation = validateAudioFile(file);
       if (!validation.valid) {
         setError(validation.error);
-        voice.speak('There was a problem uploading your vocal file.');
         setUploading(false);
         return;
       }
-
-      voice.speak(`Uploading your vocal recording...`);
       
       // Upload recording
       const result = await api.uploadRecording(file, sessionId);
@@ -95,13 +88,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       if (completeStage) {
         completeStage('upload');
       }
-      
-      // V20: Voice feedback on success
-      voice.speak('Vocal uploaded successfully. You can proceed to the mix stage.');
     } catch (err) {
       setError(err.message || 'Upload failed. Please try again.');
-      // V20: Voice feedback on error
-      voice.speak('There was a problem uploading your vocal file.');
     } finally {
       setUploading(false);
     }
@@ -114,7 +102,6 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       const validation = validateAudioFile(file);
       if (!validation.valid) {
         setError(validation.error);
-        voice.speak('There was a problem uploading your vocal file.');
         return;
       }
       uploadFile(file);
@@ -142,7 +129,6 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       onClose={onClose}
       onNext={handleNextStage}
       onBack={onBack}
-      voice={voice}
     >
       <div className="stage-scroll-container">
         {!allowed && (
@@ -202,7 +188,13 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
             className="w-full max-w-2xl p-4 bg-studio-gray/30 rounded-lg border border-studio-white/10"
           >
             <p className="text-sm text-studio-white/90 mb-3 font-montserrat">✓ Vocal Uploaded</p>
-            <WavesurferPlayer url={sessionData.vocalFile} color="#10B981" height={100} />
+            <audio
+              src={sessionData.vocalFile}
+              controls
+              style={{ width: "100%", marginTop: "0.5rem" }}
+            >
+              Your browser does not support the audio element.
+            </audio>
           </motion.div>
         )}
 

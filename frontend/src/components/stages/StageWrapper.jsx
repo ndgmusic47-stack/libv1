@@ -1,18 +1,6 @@
-import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 
-export default function StageWrapper({ title, icon, children, onClose, onNext, onBack, voice, onVoiceCommand, nextDisabled = false }) {
-  useEffect(() => {
-    if (voice && onVoiceCommand) {
-      const checkTranscript = setInterval(() => {
-        if (voice.transcript) {
-          onVoiceCommand(voice.transcript);
-        }
-      }, 1000);
-
-      return () => clearInterval(checkTranscript);
-    }
-  }, [voice, onVoiceCommand]);
+export default function StageWrapper({ title, icon, children, onClose, onNext, onBack, nextDisabled = false }) {
 
   return (
     <div className="stage-wrapper">

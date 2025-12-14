@@ -106,7 +106,7 @@ const estimateBarRhythm = (lyricsText) => {
   return rhythmMap;
 };
 
-export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
+export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, onClose, onNext, onBack, completeStage }) {
   const [theme, setTheme] = useState('');
   const [loading, setLoading] = useState(false);
   const [lyrics, setLyrics] = useState(null);
@@ -131,9 +131,6 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
 
     if (!hasSessionBeat && !hasTheme) {
       setError('Enter a theme or select a beat to generate lyrics.');
-      if (voice && voice.speak) {
-        voice.speak('Please provide a theme or create a beat first.');
-      }
       return;
     }
 
@@ -144,10 +141,6 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       let result;
 
       if (hasSessionBeat) {
-        if (voice && voice.speak) {
-          voice.speak('Generating lyrics from your session beat...');
-        }
-        
         // Fetch the beat blob
         const response = await fetch(sessionData.beatFile);
         const blob = await response.blob();
@@ -156,18 +149,8 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
         formData.append("file", blob, "session-beat.wav");
 
         result = await api.generateLyricsFromBeat(formData, sessionId);
-        if (voice && voice.speak) {
-          voice.speak('Here are your lyrics based on the session beat.');
-        }
       } else {
-        if (voice && voice.speak) {
-          voice.speak(`Writing lyrics about ${theme}...`);
-        }
-        
         result = await api.generateFreeLyrics(theme, sessionId);
-        if (voice && voice.speak) {
-          voice.speak('Here are your free lyrics.');
-        }
       }
 
       if (!result || !result.lyrics || !String(result.lyrics).trim()) {
@@ -184,9 +167,6 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
     } catch (err) {
       console.error('LyricsStage error:', err);
       setError('Lyrics generation failed. Check your connection and try again.');
-      if (voice && voice.speak) {
-        voice.speak('Sorry, couldn\'t generate lyrics right now.');
-      }
     } finally {
       setLoading(false);
     }
@@ -237,10 +217,8 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       setLyrics(result.lyrics);
       updateSessionData({ lyricsData: result.lyrics });
       setRefineText('');
-      if (voice && voice.speak) voice.speak("Here are your refined lyrics.");
     } catch (err) {
       console.error('LyricsStage error:', err);
-      if (voice && voice.speak) voice.speak("Could not refine lyrics right now.");
     } finally {
       setLoading(false);
     }
@@ -255,7 +233,6 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       onClose={onClose}
       onNext={onNext}
       onBack={onBack}
-      voice={voice}
       nextDisabled={false}
     >
       <div className="stage-scroll-container">

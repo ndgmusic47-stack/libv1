@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 
-export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
+export default function BeatStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, onClose, onNext, onBack, completeStage }) {
 
   const [mood, setMood] = useState(sessionData.mood || 'energetic');
   const [promptText, setPromptText] = useState('');
@@ -32,8 +32,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
     setError(null);
     
     try {
-      voice.speak(`Creating a ${mood} beat for you...`);
-      
       // Call beat creation API with promptText, mood, and genre
       const result = await api.createBeat(promptText, mood, sessionData.genre || 'hip hop', sessionId);
       
@@ -57,37 +55,14 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
       if (completeStage) {
         completeStage('beat');
       }
-      
-      voice.speak('Your beat is ready! Check it out.');
     } catch (err) {
       setError(err.message);
-      voice.speak('Sorry, there was an error creating the beat.');
     } finally {
       setLoading(false);
       setIsGenerating(false);
     }
   };
 
-  const handleVoiceCommand = (transcript) => {
-    const lowerTranscript = transcript.toLowerCase();
-    
-    if (lowerTranscript.includes('create') || lowerTranscript.includes('make')) {
-      const moods = ['energetic', 'chill', 'dark', 'happy', 'sad', 'aggressive'];
-      const foundMood = moods.find(m => lowerTranscript.includes(m));
-      
-      if (foundMood) {
-        setMood(foundMood);
-      }
-      
-      // Use transcript as prompt (remove "create" and "make" keywords)
-      const cleanTranscript = transcript.replace(/\b(create|make)\b/gi, '').trim();
-      if (cleanTranscript.length > 0) {
-        setPromptText(cleanTranscript);
-        // Do NOT auto-generate - just fill fields and speak back
-        voice.speak('Beat description ready. Tap Generate when you\'re ready.');
-      }
-    }
-  };
 
   return (
     <StageWrapper 
@@ -96,8 +71,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
       onClose={onClose}
       onNext={onNext}
       onBack={onBack}
-      voice={voice}
-      onVoiceCommand={handleVoiceCommand}
     >
       <div className="w-full h-full flex flex-col items-center justify-start p-6 md:p-10">
         <div className="icon-wrapper text-6xl mb-4">
@@ -177,13 +150,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
                   onClick={async () => {
                     try {
                       await api.advanceStage(sessionId);
-                      if (voice) {
-                        try {
-                          voice.speak('Beat selected. Moving to the next step.');
-                        } catch (err) {
-                          console.warn('Voice speak failed on Use Beat:', err);
-                        }
-                      }
                     } catch (err) {
                       console.error('Use Beat advanceStage error:', err);
                     }
@@ -245,9 +211,6 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
           </div>
         )}
 
-        <p className="text-xs text-studio-white/60 font-poppins text-center max-w-md">
-          Try saying: "Create an energetic beat" or "Make a chill vibe"
-        </p>
       </div>
     </StageWrapper>
   );

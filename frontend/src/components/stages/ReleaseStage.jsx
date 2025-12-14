@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { api } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 
-export default function ReleaseStage({ openUpgradeModal, sessionData, updateSessionData, voice, onClose, onNext, onBack, sessionId, completeStage, masterFile, onComplete }) {
+export default function ReleaseStage({ openUpgradeModal, sessionData, updateSessionData, onClose, onNext, onBack, sessionId, completeStage, masterFile, onComplete }) {
   const allowed = true; // No auth - always allowed
 
   // Form inputs
@@ -122,13 +122,11 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
     }
 
     if (!trackTitle || !artistName) {
-      voice.speak('Please enter track title and artist name first');
       return;
     }
 
     setGeneratingCover(true);
     try {
-      voice.speak("Generating cover art...");
       const result = await api.generateReleaseCover(currentSessionId, trackTitle, artistName, genre, mood, coverStyle);
       
       if (result.data && result.data.images && result.data.images.length > 0) {
@@ -138,13 +136,9 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
         await api.selectReleaseCover(currentSessionId, result.data.images[0]);
         // Refresh release pack
         await fetchReleasePack();
-        voice.speak(`Generated ${result.data.images.length} cover art options`);
-      } else {
-        voice.speak('Failed to generate cover art');
       }
     } catch (err) {
       console.error('Cover generation error:', err);
-      voice.speak('Failed to generate cover art. Try again.');
     } finally {
       setGeneratingCover(false);
     }
@@ -157,22 +151,18 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
     }
 
     if (!trackTitle || !artistName) {
-      voice.speak('Please enter track title and artist name first');
       return;
     }
 
     setGeneratingCopy(true);
     try {
-      voice.speak("Generating release copy...");
       const lyrics = sessionData.lyricsData || sessionData.lyrics || '';
       await api.generateReleaseCopy(currentSessionId, trackTitle, artistName, genre, mood, lyrics);
       
       // Refresh release pack
       await fetchReleasePack();
-      voice.speak("Release copy generated");
     } catch (err) {
       console.error('Copy generation error:', err);
-      voice.speak('Failed to generate release copy');
     } finally {
       setGeneratingCopy(false);
     }
@@ -198,7 +188,6 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
       
       // Refresh release pack
       await fetchReleasePack();
-      voice.speak("Metadata generated");
     } catch (err) {
       console.error('Metadata generation error:', err);
       
@@ -209,8 +198,6 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
           return;
         }
       }
-      
-      voice.speak('Failed to generate metadata');
     } finally {
       setGeneratingMetadata(false);
     }
@@ -225,7 +212,6 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
     try {
       const lyrics = sessionData.lyricsData || sessionData.lyrics || '';
       if (!lyrics || !lyrics.trim()) {
-        voice.speak('No lyrics found to generate PDF');
         return;
       }
       
@@ -234,10 +220,8 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
       
       // Refresh release pack
       await fetchReleasePack();
-      voice.speak("Lyrics PDF generated");
     } catch (err) {
       console.error('Lyrics PDF generation error:', err);
-      voice.speak('Failed to generate lyrics PDF');
     } finally {
       setGeneratingLyricsPDF(false);
     }
@@ -261,7 +245,6 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
     }
 
     try {
-      voice.speak("Preparing release pack...");
       const result = await api.downloadAllReleaseFiles(currentSessionId);
       if (result && result.zip_url) {
         const zipUrl = getFileUrl(result.zip_url);
@@ -271,11 +254,9 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
         if (completeStage) {
           completeStage('release');
         }
-        voice.speak("Release pack ready");
       }
     } catch (err) {
       console.error('ZIP generation error:', err);
-      voice.speak('Failed to generate release pack');
     }
   };
 
@@ -288,7 +269,6 @@ export default function ReleaseStage({ openUpgradeModal, sessionData, updateSess
       onClose={onClose}
       onNext={onNext}
       onBack={onBack}
-      voice={voice}
     >
       <div className="stage-scroll-container">
         {!allowed && (

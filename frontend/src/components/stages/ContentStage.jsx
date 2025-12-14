@@ -20,7 +20,7 @@ function computeViralityScore(caption, title, hook) {
   return Math.min(score, 95);
 }
 
-export default function ContentStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, voice, onClose, onNext, onBack, completeStage }) {
+export default function ContentStage({ openUpgradeModal, sessionId, sessionData, updateSessionData, onClose, onNext, onBack, completeStage }) {
   const allowed = true; // No auth - always allowed
 
   const [activeTab, setActiveTab] = useState('social');
@@ -47,8 +47,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
 
     setIdeaLoading(true);
     try {
-      voice.speak('Generating video idea...');
-      
       const result = await api.generateVideoIdea(
         sessionId,
         sessionData.trackTitle || sessionData.title || 'My Track',
@@ -59,9 +57,8 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
       
       setContentIdea(result);
       updateSessionData({ contentIdea: result });
-      voice.speak('Video idea generated!');
     } catch (err) {
-      voice.speak('Failed to generate video idea. Try again.');
+      console.error('Failed to generate video idea:', err);
     } finally {
       setIdeaLoading(false);
     }
@@ -78,14 +75,11 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.mp4') && !file.name.toLowerCase().endsWith('.mov')) {
-      voice.speak('Please upload an MP4 or MOV file');
       return;
     }
 
     setVideoUploadLoading(true);
     try {
-      voice.speak('Uploading video...');
-      
       const result = await api.uploadVideo(file, sessionId);
       
       setUploadedVideo(result.file_url);
@@ -99,10 +93,9 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
         uploadedVideo: result.file_url,
         videoTranscript: transcriptText
       });
-      voice.speak('Video uploaded and processed!');
     } catch (err) {
       setVideoTranscript('Transcript unavailable. Try again later.');
-      voice.speak('Video upload failed. Try again.');
+      console.error('Video upload failed:', err);
     } finally {
       setVideoUploadLoading(false);
     }
@@ -116,14 +109,11 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
     }
 
     if (!videoTranscript) {
-      voice.speak('Please upload a video first');
       return;
     }
 
     setAnalyzeLoading(true);
     try {
-      voice.speak('Analyzing video for viral potential...');
-      
       const result = await api.analyzeVideo(
         videoTranscript,
         sessionData.trackTitle || sessionData.title || 'My Track',
@@ -134,9 +124,8 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
       
       setViralAnalysis(result);
       updateSessionData({ viralAnalysis: result });
-      voice.speak(`Analysis complete! Viral score: ${result.score}`);
     } catch (err) {
-      voice.speak('Video analysis failed. Try again.');
+      console.error('Video analysis failed:', err);
     } finally {
       setAnalyzeLoading(false);
     }
@@ -151,8 +140,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
 
     setTextPackLoading(true);
     try {
-      voice.speak('Generating captions and hashtags...');
-      
       const result = await api.generateContentText(
         sessionId,
         sessionData.trackTitle || sessionData.title || 'My Track',
@@ -168,9 +155,8 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
       if (completeStage) {
         completeStage('content');
       }
-      voice.speak('Captions and hashtags generated!');
     } catch (err) {
-      voice.speak('Failed to generate content text. Try again.');
+      console.error('Failed to generate content text:', err);
     } finally {
       setTextPackLoading(false);
     }
@@ -184,7 +170,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
     }
 
     if (!uploadedVideo || !selectedCaption || !scheduleTime) {
-      voice.speak('Please complete all steps first');
       return;
     }
 
@@ -192,8 +177,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
     setError('');
     setSuccess('');
     try {
-      voice.speak('Scheduling video...');
-      
       const result = await api.scheduleVideo(
         sessionId,
         uploadedVideo,
@@ -213,7 +196,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
         });
         
         updateSessionData({ contentScheduled: true });
-        voice.speak('Your video has been scheduled.');
         setSuccess('Your post is scheduled!');
         
         // Auto-clear success message after 3 seconds
@@ -229,7 +211,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
     } catch (err) {
       const errorMsg = err.message || 'Scheduling failed. Try again.';
       setError(errorMsg);
-      voice.speak(errorMsg);
       // Auto-clear error after 3 seconds
       setTimeout(() => setError(''), 3000);
     } finally {
@@ -244,7 +225,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
       onClose={onClose}
       onNext={onNext}
       onBack={onBack}
-      voice={voice}
     >
       <div className="flex flex-col h-full">
         {/* Tabs */}
@@ -270,7 +250,6 @@ export default function ContentStage({ openUpgradeModal, sessionId, sessionData,
           <AnimatePresence mode="wait">
             {activeTab === 'social' && (
               <SocialContentTab
-                voice={voice}
                 selectedPlatform={selectedPlatform}
                 onPlatformChange={setSelectedPlatform}
                 scheduleLoading={scheduleLoading}
@@ -322,7 +301,6 @@ function TabButton({ active, onClick, icon, label }) {
 }
 
 function SocialContentTab({ 
-  voice,
   selectedPlatform,
   onPlatformChange,
   scheduleLoading,
@@ -779,25 +757,21 @@ function SocialContentTab({
               // Validate inputs
               if (!selectedPlatform) {
                 setError('Please select a platform before scheduling.');
-                voice.speak('Please select a platform');
                 setTimeout(() => setError(''), 3000);
                 return;
               }
               if (!scheduleDate) {
                 setError('Please select a date before scheduling.');
-                voice.speak('Please select a date');
                 setTimeout(() => setError(''), 3000);
                 return;
               }
               if (!scheduleTime) {
                 setError('Please select a time before scheduling.');
-                voice.speak('Please select a time');
                 setTimeout(() => setError(''), 3000);
                 return;
               }
               if (!selectedCaption) {
                 setError('Please select a caption before scheduling.');
-                voice.speak('Please select a caption');
                 setTimeout(() => setError(''), 3000);
                 return;
               }
