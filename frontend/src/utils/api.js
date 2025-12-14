@@ -8,9 +8,21 @@ export const normalizeMediaUrl = (url) => {
   if (url.startsWith('/api/media/')) return url;
 
   if (url.startsWith('/media/')) {
-    // Only rewrite in local dev where the frontend needs the /api proxy
-    if (import.meta?.env?.DEV) return `/api${url}`;
-    return url; // prod serves /media directly
+    // Helper to strip trailing /api or /api/ from API_BASE
+    const stripApiSuffix = (base) => {
+      if (base.endsWith('/api/')) return base.slice(0, -5);
+      if (base.endsWith('/api')) return base.slice(0, -4);
+      return base;
+    };
+
+    // If API_BASE is absolute (starts with http:// or https://), derive backend origin
+    if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+      const backendOrigin = stripApiSuffix(API_BASE);
+      return `${backendOrigin}${url}`;
+    }
+
+    // If API_BASE is relative, return url unchanged
+    return url;
   }
 
   return url;

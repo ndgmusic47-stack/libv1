@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { api } from '../../utils/api';
+import { api, normalizeMediaUrl } from '../../utils/api';
 import StageWrapper from './StageWrapper';
 import WavesurferPlayer from '../WavesurferPlayer';
 
@@ -83,7 +83,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       const result = await api.uploadRecording(file, sessionId);
       
       // MVP PATCH: Extract file URL from 'file_path' returned by the FastAPI endpoint
-      const fileUrl = result.file_path; // <== Now reads correct key
+      const fileUrl = normalizeMediaUrl(result.file_path);
       
       // V20: Update sessionData with vocal file
       updateSessionData({
