@@ -97,6 +97,8 @@ async def write_song(
                 
                 # Generate voice using default persona "nova"
                 voice_result = gtts_speak("nova", voice_text, session_id, None)
+                if hasattr(voice_result, "content") and isinstance(voice_result.content, dict):
+                    voice_result = voice_result.content
                 if isinstance(voice_result, dict) and voice_result.get("ok"):
                     voice_url = voice_result.get("data", {}).get("url")
                     import logging

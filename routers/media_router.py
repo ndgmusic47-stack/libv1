@@ -133,6 +133,10 @@ async def generate_vocal(
         # Call gtts_speak (run in thread pool since it's a sync function)
         voice_result = await asyncio.to_thread(gtts_speak, "nova", text, session_id, None)
         
+        # gtts_speak returns JSONResponse (success_response/error_response). Normalize to dict.
+        if hasattr(voice_result, "content") and isinstance(voice_result.content, dict):
+            voice_result = voice_result.content
+        
         # Check if gtts_speak returned an error
         if not isinstance(voice_result, dict) or not voice_result.get("ok"):
             error_msg = voice_result.get("message") or voice_result.get("error") or "Failed to generate voice"
