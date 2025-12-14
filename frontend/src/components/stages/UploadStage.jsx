@@ -9,6 +9,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState(null);
 
   // V20: Frontend audio validation
   const validateAudioFile = (file) => {
@@ -108,6 +110,64 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
     }
   };
 
+  // Extract lyrics text from sessionData.lyricsData
+  const getLyricsText = () => {
+    if (!sessionData?.lyricsData) return null;
+    if (typeof sessionData.lyricsData === 'string') {
+      return sessionData.lyricsData;
+    }
+    // Try lyrics_text property first
+    if (sessionData.lyricsData.lyrics_text) {
+      return sessionData.lyricsData.lyrics_text;
+    }
+    // If structured lyrics, try to extract text
+    // For now, return null if we can't extract text easily
+    return null;
+  };
+
+  const handleGenerateVocal = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      return;
+    }
+
+    const lyricsText = getLyricsText();
+    if (!lyricsText || !lyricsText.trim()) {
+      setError('No lyrics available. Please generate lyrics first.');
+      return;
+    }
+
+    setGenerating(true);
+    setError(null);
+    setGenerationStatus('Generating vocal...');
+
+    try {
+      const result = await api.generateVocal(sessionId, lyricsText);
+      
+      // Normalize returned file_path via normalizeMediaUrl
+      const fileUrl = normalizeMediaUrl(result.file_path);
+      
+      // Update session data
+      updateSessionData({
+        songFile: fileUrl,
+        vocalFile: fileUrl, // compat
+        vocalUploaded: true
+      });
+
+      setGenerationStatus('Vocal generated successfully!');
+      
+      // Auto-complete upload stage
+      if (completeStage) {
+        completeStage('upload');
+      }
+    } catch (err) {
+      setError(err.message || 'Vocal generation failed. Please try again.');
+      setGenerationStatus(null);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // MVP PATCH: Handle progression to the next stage (Mix)
   const handleNextStage = async () => {
     try {
@@ -177,8 +237,32 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
           </label>
         </motion.div>
 
+        {/* Generate Vocal Button */}
+        {sessionData?.lyricsData && (
+          <motion.button
+            onClick={handleGenerateVocal}
+            disabled={generating || uploading}
+            className={`
+              w-full max-w-2xl py-3 px-6 rounded-lg font-montserrat font-semibold
+              transition-all duration-300
+              ${generating || uploading
+                ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+              }
+            `}
+            whileHover={generating || uploading ? {} : { scale: 1.02 }}
+            whileTap={generating || uploading ? {} : { scale: 0.98 }}
+          >
+            {generating ? generationStatus || 'Generating...' : 'Generate Vocal from Lyrics'}
+          </motion.button>
+        )}
+
         {error && (
           <p className="text-red-400 text-sm">{error}</p>
+        )}
+
+        {generationStatus && !error && (
+          <p className="text-green-400 text-sm">{generationStatus}</p>
         )}
 
         {sessionData.vocalFile && (

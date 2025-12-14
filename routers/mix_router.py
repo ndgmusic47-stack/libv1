@@ -21,6 +21,8 @@ from utils.shared_utils import log_endpoint_event
 from jobs.mix_job_manager import MixJobManager, JOBS
 from utils.mix.timeline import get_timeline
 from services.transport_service import play, pause, stop, seek
+from project_memory import get_or_create_project_memory
+from config.settings import MEDIA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -72,17 +74,20 @@ async def start_mix(
         if request.beat_url:
             stems["beat"] = request.beat_url
         
-        # If no stems in request, try to find default stems
-        if not stems:
-            from config.settings import MEDIA_DIR
-            base = MEDIA_DIR / session_id
-            vocal_path = base / "vocal.wav"
-            beat_path = base / "beat.mp3"
+        # If stems are missing, try to find them from project memory
+        if not stems.get("vocal") or not stems.get("beat"):
+            memory = await get_or_create_project_memory(project_id, MEDIA_DIR, None, db)
+            assets = (memory.project_data or {}).get("assets", {})
+            vocals = assets.get("vocals") or []
+            beat = assets.get("beat")
             
-            if vocal_path.exists():
-                stems["vocal"] = str(vocal_path)
-            if beat_path.exists():
-                stems["beat"] = str(beat_path)
+            if not stems.get("vocal") and vocals and len(vocals) > 0 and vocals[0].get("url"):
+                stems["vocal"] = vocals[0]["url"]
+            if not stems.get("beat") and beat and beat.get("url"):
+                stems["beat"] = beat["url"]
+            
+            if not stems.get("vocal") or not stems.get("beat"):
+                raise HTTPException(status_code=400, detail="Missing vocal or beat asset in project memory")
         
         if not stems:
             return error_response("NO_STEMS", 400, "No stems provided for mixing")

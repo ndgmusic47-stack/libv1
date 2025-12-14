@@ -70,6 +70,7 @@ export default function AppPage() {
         });
         setCompletedStages(completedObj);
       }
+      await api.syncProject(sessionId, updateSessionData);
     } catch (err) {
       // New session - use defaults
     }

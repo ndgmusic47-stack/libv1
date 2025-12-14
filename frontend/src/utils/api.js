@@ -208,6 +208,16 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    return handleResponse(response);
  },
 
+ generateVocal: async (sessionId, text) => {
+   const response = await fetch(`${API_BASE}/media/generate/vocal`, {
+     method: "POST",
+     credentials: "include",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify({ session_id: sessionId, text }),
+   });
+   return handleResponse(response);
+ },
+
 
 
 
@@ -601,6 +611,12 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
         // Fallback to stems for backward compatibility
         updates.vocalFile = normalizeMediaUrl(project.assets.stems[0].url);
       }
+      
+      // Song file - canonical single file for upload + AI generation
+      if (project.assets?.song?.url) {
+        updates.songFile = normalizeMediaUrl(project.assets.song.url);
+        if (!updates.vocalFile) updates.vocalFile = updates.songFile; // compat
+      }
        
        // Mix file from project.assets.mix?.url
        if (project.assets.mix?.url) {
@@ -736,7 +752,7 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
   // ========== MIX JOB ENDPOINTS ==========
   startMix: async (projectId, config = {}) => {
     const response = await fetch(
-      `${API_BASE}/projects/${projectId}/mix/start`,
+      `${API_BASE}/mix/${projectId}/mix/start`,
       {
         method: 'POST',
         credentials: "include",
@@ -764,7 +780,7 @@ export async function createPortalSession() {
 // Start a DSP mix job
 export async function startMix(projectId, config = {}) {
   const response = await fetch(
-    `${API_BASE}/projects/${projectId}/mix/start`,
+    `${API_BASE}/mix/${projectId}/mix/start`,
     {
       method: 'POST',
       credentials: "include",
