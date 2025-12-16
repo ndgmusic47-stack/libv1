@@ -218,6 +218,20 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    return handleResponse(response);
  },
 
+ generateSong: async (sessionId, lyrics = null, style = null) => {
+   const response = await fetch(`${API_BASE}/media/generate/song`, {
+     method: "POST",
+     credentials: "include",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify({ 
+       session_id: sessionId, 
+       lyrics: lyrics,
+       style: style
+     }),
+   });
+   return handleResponse(response);
+ },
+
 
 
 
@@ -772,6 +786,11 @@ export async function createCheckoutSession() {
 
 export async function createPortalSession() {
   return api.createPortalSession();
+}
+
+// Simple vocal upload helper (compat with spec)
+export async function uploadVocal(file, sessionId) {
+  return api.uploadRecording(file, sessionId);
 }
 
 

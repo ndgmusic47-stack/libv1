@@ -18,9 +18,12 @@ ALLOWED_MIME_TYPES = [
     "audio/x-mpeg-3",
     "audio/aiff",
     "audio/x-aiff",
+    # Browser-recorded audio formats
+    "audio/webm",
+    "audio/ogg",
 ]
 
-ALLOWED_EXTENSIONS = [".wav", ".mp3", ".aiff", ".wave"]
+ALLOWED_EXTENSIONS = [".wav", ".mp3", ".aiff", ".wave", ".webm", ".ogg"]
 
 # 50MB in bytes
 MAX_FILE_SIZE = 50 * 1024 * 1024

@@ -23,3 +23,4 @@ pytest-asyncio
 httpx
 aiofiles
 redis
+replicate>=0.25.0

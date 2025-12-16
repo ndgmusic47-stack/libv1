@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { api, normalizeMediaUrl } from '../../utils/api';
 import StageWrapper from './StageWrapper';
@@ -11,6 +11,10 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
   const [error, setError] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   // V20: Frontend audio validation
   const validateAudioFile = (file) => {
@@ -20,17 +24,34 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       return { valid: false, error: 'File size exceeds 50MB limit' };
     }
 
-    // Check file extension (supported formats: .wav, .mp3, .aiff)
-    const allowedExtensions = ['.wav', '.mp3', '.aiff'];
+    // Check file extension (supported formats: .wav, .mp3, .aiff, .webm, .ogg)
+    const allowedExtensions = ['.wav', '.mp3', '.aiff', '.webm', '.ogg'];
     const fileName = file.name.toLowerCase();
     const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
     
     if (!hasValidExtension) {
-      return { valid: false, error: 'Unsupported format. Please use .wav, .mp3, or .aiff' };
+      return { valid: false, error: 'Unsupported format. Please use .wav, .mp3, .aiff, .webm, or .ogg' };
     }
 
     return { valid: true };
   };
+
+  // Cleanup on unmount to ensure mic is released
+  useEffect(() => {
+    return () => {
+      try {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (e) {
+        // Ignore errors during cleanup
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+    };
+  }, []);
 
   const handleDrop = useCallback(async (e) => {
     e.preventDefault();
@@ -38,7 +59,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
     
     try {
       const files = Array.from(e.dataTransfer.files);
-      const audioFile = files.find(f => f.type.startsWith('audio/') || f.name.match(/\.(wav|mp3|aiff)$/i));
+      const audioFile = files.find(f => f.type.startsWith('audio/') || f.name.match(/\.(wav|mp3|aiff|webm|ogg)$/i));
       
       if (audioFile) {
         // V20: Validate before upload
@@ -49,7 +70,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
         }
         await uploadFile(audioFile);
       } else {
-        setError('Please drop an audio file (.wav, .mp3, .aiff)');
+        setError('Please drop an audio file (.wav, .mp3, .aiff, .webm, .ogg)');
       }
     } catch (err) {
       setError(err.message || 'An error occurred');
@@ -107,6 +128,111 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
         return;
       }
       uploadFile(file);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      return;
+    }
+
+    if (isRecording) return;
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Recording is not supported in this browser.');
+      return;
+    }
+
+    if (typeof MediaRecorder === 'undefined') {
+      setError('Recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      setError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const preferredTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+      ];
+
+      let options = {};
+      let selectedType = null;
+
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported) {
+        for (const type of preferredTypes) {
+          if (MediaRecorder.isTypeSupported(type)) {
+            options.mimeType = type;
+            selectedType = type;
+            break;
+          }
+        }
+      }
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream, options);
+      } catch (err) {
+        recorder = new MediaRecorder(stream);
+        selectedType = recorder.mimeType || selectedType;
+      }
+
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        try {
+          const mimeType = selectedType || recorder.mimeType || 'audio/webm';
+          const extension = mimeType.includes('ogg') ? '.ogg' : '.webm';
+          const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+          if (blob.size === 0) {
+            setError('Recording was empty. Please try again.');
+          } else {
+            const fileName = `vocal_recorded_${Date.now()}${extension}`;
+            const file = new File([blob], fileName, { type: mimeType });
+            await uploadFile(file);
+          }
+        } catch (err) {
+          setError(err.message || 'Recording upload failed. Please try again.');
+        } finally {
+          if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+            mediaStreamRef.current = null;
+          }
+          setIsRecording(false);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      }
+      setIsRecording(false);
+      setError(err.message || 'Could not start recording. Please check microphone permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        setError(err.message || 'Failed to stop recording.');
+      }
     }
   };
 
@@ -168,17 +294,46 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
     }
   };
 
-  // MVP PATCH: Handle progression to the next stage (Mix)
-  const handleNextStage = async () => {
+  const handleGenerateSong = async () => {
+    if (!allowed) {
+      openUpgradeModal();
+      return;
+    }
+
+    const lyricsText = getLyricsText();
+    if (!lyricsText || !lyricsText.trim()) {
+      setError('No lyrics available. Please generate lyrics first.');
+      return;
+    }
+
+    setGenerating(true);
+    setError(null);
+    setGenerationStatus('Generating AI song...');
+
     try {
-      // Fire the Mix job on the backend, but don't block navigation if it fails
-      await api.startMix(sessionId, {}); // Send empty config/body to satisfy Body(...) requirement
-    } catch (err) {
-      console.error("startMix failed, continuing to next stage anyway:", err);
-    } finally {
-      if (onNext) {
-        onNext();
+      const result = await api.generateSong(sessionId, lyricsText);
+      
+      // Normalize returned file_path via normalizeMediaUrl
+      const fileUrl = normalizeMediaUrl(result.file_path);
+      
+      // Update session data
+      updateSessionData({
+        songFile: fileUrl,
+        vocalFile: fileUrl, // compat
+        vocalUploaded: true
+      });
+
+      setGenerationStatus('AI song generated successfully!');
+      
+      // Auto-complete upload stage
+      if (completeStage) {
+        completeStage('upload');
       }
+    } catch (err) {
+      setError(err.message || 'AI song generation failed. Please try again.');
+      setGenerationStatus(null);
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -187,7 +342,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       title="Upload Recording" 
       icon="🎤" 
       onClose={onClose}
-      onNext={handleNextStage}
+      onNext={onNext}
       onBack={onBack}
     >
       <div className="stage-scroll-container">
@@ -222,7 +377,7 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
           <input
             type="file"
             id="file-input"
-            accept="audio/*,.wav,.mp3,.aiff"
+            accept="audio/*,.wav,.mp3,.aiff,.webm,.ogg"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -232,29 +387,88 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
               {uploading ? 'Uploading...' : 'Drop your vocal recording here'}
             </p>
             <p className="text-xs text-studio-white/60 font-poppins mt-2">
-              or click to browse (.wav, .mp3, .aiff)
+              or click to browse (.wav, .mp3, .aiff, .webm, .ogg)
             </p>
           </label>
         </motion.div>
 
-        {/* Generate Vocal Button */}
+        {/* Recording controls */}
+        <div className="w-full max-w-2xl space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <motion.button
+              onClick={startRecording}
+              disabled={uploading || generating || isRecording}
+              className={`
+                w-full sm:w-1/2 py-3 px-6 rounded-lg font-montserrat font-semibold
+                transition-all duration-300
+                ${uploading || generating || isRecording
+                  ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                  : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+                }
+              `}
+              whileHover={uploading || generating || isRecording ? {} : { scale: 1.02 }}
+              whileTap={uploading || generating || isRecording ? {} : { scale: 0.98 }}
+            >
+              {isRecording ? 'Recording...' : 'Record'}
+            </motion.button>
+            <motion.button
+              onClick={stopRecording}
+              disabled={!isRecording}
+              className={`
+                w-full sm:w-1/2 py-3 px-6 rounded-lg font-montserrat font-semibold
+                transition-all duration-300
+                ${!isRecording
+                  ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                  : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+                }
+              `}
+              whileHover={!isRecording ? {} : { scale: 1.02 }}
+              whileTap={!isRecording ? {} : { scale: 0.98 }}
+            >
+              Stop
+            </motion.button>
+          </div>
+          {isRecording && (
+            <p className="text-sm text-studio-red text-center">Recording…</p>
+          )}
+        </div>
+
+        {/* Generate Vocal Buttons */}
         {sessionData?.lyricsData && (
-          <motion.button
-            onClick={handleGenerateVocal}
-            disabled={generating || uploading}
-            className={`
-              w-full max-w-2xl py-3 px-6 rounded-lg font-montserrat font-semibold
-              transition-all duration-300
-              ${generating || uploading
-                ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
-                : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
-              }
-            `}
-            whileHover={generating || uploading ? {} : { scale: 1.02 }}
-            whileTap={generating || uploading ? {} : { scale: 0.98 }}
-          >
-            {generating ? generationStatus || 'Generating...' : 'Generate Vocal from Lyrics'}
-          </motion.button>
+          <div className="w-full max-w-2xl space-y-3">
+            <motion.button
+              onClick={handleGenerateVocal}
+              disabled={generating || uploading}
+              className={`
+                w-full py-3 px-6 rounded-lg font-montserrat font-semibold
+                transition-all duration-300
+                ${generating || uploading
+                  ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                  : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+                }
+              `}
+              whileHover={generating || uploading ? {} : { scale: 1.02 }}
+              whileTap={generating || uploading ? {} : { scale: 0.98 }}
+            >
+              {generating ? generationStatus || 'Generating...' : 'Spoken TTS Preview'}
+            </motion.button>
+            <motion.button
+              onClick={handleGenerateSong}
+              disabled={generating || uploading}
+              className={`
+                w-full py-3 px-6 rounded-lg font-montserrat font-semibold
+                transition-all duration-300
+                ${generating || uploading
+                  ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                  : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+                }
+              `}
+              whileHover={generating || uploading ? {} : { scale: 1.02 }}
+              whileTap={generating || uploading ? {} : { scale: 0.98 }}
+            >
+              {generating ? generationStatus || 'Generating...' : 'Generate AI Song (Sung)'}
+            </motion.button>
+          </div>
         )}
 
         {error && (

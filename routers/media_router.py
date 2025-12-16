@@ -19,6 +19,8 @@ from project_memory import get_or_create_project_memory
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import gtts_speak
 from config.settings import MEDIA_DIR
+from services.replicate_song_service import replicate_generate_song_yue
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,13 @@ media_router = APIRouter(prefix="/api/media")
 class GenerateVocalRequest(BaseModel):
     session_id: str
     text: str
+
+
+class GenerateSongRequest(BaseModel):
+    session_id: str
+    lyrics: Optional[str] = None
+    lyrics_url: Optional[str] = None
+    style: Optional[str] = "motivational hip-hop / rock"
 
 
 # === FIX 1: Add alias route to match frontend calls ===
@@ -208,3 +217,146 @@ async def generate_vocal(
     except Exception as e:
         logger.error(f"Error generating vocal: {e}", exc_info=True)
         return error_response(f"Failed to generate vocal: {str(e)}", status=500)
+
+
+@media_router.post("/generate/song")
+async def generate_song(
+    request: GenerateSongRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate AI song using Replicate YuE model and save to recordings directory.
+    
+    Body: { session_id: str, lyrics: str | None, lyrics_url: str | None, style: str | None }
+    Returns: { session_id, file_url, file_path }
+    """
+    session_id = request.session_id
+    user_id = None
+    
+    try:
+        # Load project memory
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id, db)
+        
+        # Resolve lyrics text
+        lyrics_text = None
+        
+        # Priority 1: Use lyrics from request
+        if request.lyrics and request.lyrics.strip():
+            lyrics_text = request.lyrics.strip()
+        # Priority 2: Read from lyrics_url if provided
+        elif request.lyrics_url:
+            # Map /media/... to ./media/...
+            if request.lyrics_url.startswith("/media/"):
+                rel_path = request.lyrics_url.replace("/media/", "", 1).lstrip("/")
+                lyrics_path = MEDIA_DIR / rel_path
+            else:
+                lyrics_path = Path(request.lyrics_url)
+            
+            if lyrics_path.exists():
+                async with aiofiles.open(lyrics_path, "r", encoding="utf-8") as f:
+                    lyrics_text = await f.read()
+            else:
+                return error_response(f"Lyrics file not found: {request.lyrics_url}", status=400)
+        # Priority 3: Get from project memory
+        else:
+            # Try to get lyrics from memory
+            lyrics_asset = memory.project_data.get("assets", {}).get("lyrics")
+            if lyrics_asset:
+                if isinstance(lyrics_asset, str):
+                    lyrics_text = lyrics_asset
+                elif isinstance(lyrics_asset, dict) and "url" in lyrics_asset:
+                    # Try to read from lyrics file URL
+                    lyrics_url = lyrics_asset["url"]
+                    if lyrics_url.startswith("/media/"):
+                        rel_path = lyrics_url.replace("/media/", "", 1).lstrip("/")
+                        lyrics_path = MEDIA_DIR / rel_path
+                        if lyrics_path.exists():
+                            async with aiofiles.open(lyrics_path, "r", encoding="utf-8") as f:
+                                lyrics_text = await f.read()
+            
+            # Also check if lyrics are stored directly in memory
+            if not lyrics_text:
+                lyrics_data = memory.project_data.get("lyrics") or memory.project_data.get("assets", {}).get("lyrics")
+                if isinstance(lyrics_data, str):
+                    lyrics_text = lyrics_data
+                elif isinstance(lyrics_data, dict):
+                    # Try common keys
+                    lyrics_text = lyrics_data.get("lyrics_text") or lyrics_data.get("text") or lyrics_data.get("lyrics")
+        
+        if not lyrics_text or not lyrics_text.strip():
+            return error_response("No lyrics provided. Please provide lyrics, lyrics_url, or ensure lyrics exist in project memory.", status=400)
+        
+        logger.info(f"Generating AI song for session {session_id} with lyrics length: {len(lyrics_text)}")
+        
+        # Call Replicate service
+        audio_url = await replicate_generate_song_yue(lyrics_text, request.style)
+        
+        if not audio_url:
+            return error_response("Failed to get audio URL from Replicate", status=500)
+        
+        logger.info(f"Downloading audio from Replicate: {audio_url}")
+        
+        # Download the audio file
+        async with httpx.AsyncClient(follow_redirects=True, timeout=300.0) as client:
+            response = await client.get(audio_url)
+            response.raise_for_status()
+            audio_content = response.content
+        
+        # Determine file extension from URL or default to mp3
+        file_ext = ".mp3"
+        if audio_url.endswith(".wav"):
+            file_ext = ".wav"
+        elif audio_url.endswith(".mp3"):
+            file_ext = ".mp3"
+        
+        # Create recordings directory
+        recordings_dir = MEDIA_DIR / session_id / "recordings"
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save with timestamped filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"ai_song_{timestamp}{file_ext}"
+        file_path = recordings_dir / filename
+        file_url = f"/media/{session_id}/recordings/{filename}"
+        
+        # Save file
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(audio_content)
+        
+        logger.info(f"AI song saved: {filename} for session {session_id}")
+        
+        # Update project memory
+        if "assets" not in memory.project_data:
+            memory.project_data["assets"] = {}
+        
+        # Set assets.song.url
+        memory.project_data["assets"]["song"] = {
+            "url": file_url,
+            "added_at": datetime.now().isoformat(),
+            "metadata": {"source": "ai_song_replicate_yue"}
+        }
+        
+        # Set assets.vocals[0].url
+        memory.project_data["assets"]["vocals"] = [{
+            "url": file_url,
+            "added_at": datetime.now().isoformat(),
+            "metadata": {"source": "ai_song_replicate_yue"}
+        }]
+        
+        await memory.save()
+        
+        return success_response(
+            data={
+                "session_id": session_id,
+                "file_url": file_url,
+                "file_path": file_url,
+            },
+            message="AI song generated"
+        )
+    
+    except ValueError as e:
+        logger.error(f"Validation error generating song: {e}", exc_info=True)
+        return error_response(str(e), status=400)
+    except Exception as e:
+        logger.error(f"Error generating song: {e}", exc_info=True)
+        return error_response(f"Failed to generate song: {str(e)}", status=500)

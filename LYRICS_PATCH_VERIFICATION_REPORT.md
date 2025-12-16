@@ -377,3 +377,6 @@ if (project.lyrics?.text) {
 
 
 
+
+
+
