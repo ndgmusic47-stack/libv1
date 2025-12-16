@@ -318,7 +318,15 @@ Make it authentic and emotionally resonant."""
             }
         
         if project:
-            project["lyrics"] = str(lyrics_path)
+            project["lyrics"] = {
+                "text": lyrics_text,
+                "completed": True,
+                "meta": {
+                    "provider": "llm",
+                    "source": "generated",
+                    "file_path": str(lyrics_path)
+                }
+            }
             project["lyrics_text"] = lyrics_text
             project["updated_at"] = datetime.now().isoformat()
             with open(project_file, "w", encoding="utf-8") as f:
@@ -326,7 +334,7 @@ Make it authentic and emotionally resonant."""
         
         # Auto-save to project memory
         memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None)
-        if "lyrics" not in memory.project_data:
+        if not isinstance(memory.project_data.get("lyrics"), dict):
             memory.project_data["lyrics"] = {}
         memory.project_data["lyrics"].update({
             "text": lyrics_text,

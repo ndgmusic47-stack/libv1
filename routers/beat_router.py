@@ -83,7 +83,7 @@ async def create_beat(
         log_endpoint_event("/beats/create", session_id, "error", {"error": str(e)})
         return error_response(
             f"Beat generation failed: {str(e)}",
-            status_code=500,
+            status=500,
             data={"session_id": session_id}
         )
 
@@ -101,7 +101,7 @@ async def get_beat_credits():
         log_endpoint_event("/beats/credits", None, "error", {"error": str(e)})
         return error_response(
             str(e),
-            status_code=500,
+            status=500,
             data={}
         )
 
@@ -114,31 +114,31 @@ async def get_beat_status(job_id: str):
     if job is None:
         return error_response(
             f"Beat job {job_id} not found",
-            status_code=404,
+            status=404,
             data={}
         )
-    
-    # If job exists, return status
-    if job.get("status") in ["ready", "error"]:
-        return success_response(
-            data={
-                "job_id": job_id,
-                "status": job.get("status"),
-                "progress": job.get("progress", 0),
-                "beat_url": job.get("beat_url"),
-                "message": job.get("message")
-            },
-            message="Beat job status updated"
+
+    status = job.get("status")
+
+    # If the upstream provider reports an error, surface it as an HTTP error
+    if status == "error":
+        error_message = job.get("error") or job.get("message") or f"Beat job {job_id} failed"
+        return error_response(
+            error_message,
+            status=502,
+            data=job
         )
-    
-    # Poll for updates (placeholder)
+
+    # For ready/processing states, return a success response and pass through payload
+    if status == "ready":
+        return success_response(
+            data=job,
+            message="Beat job ready"
+        )
+
+    # Default: treat anything else as in-progress for compatibility
     return success_response(
-        data={
-            "job_id": job_id,
-            "status": job.get("status", "processing"),
-            "progress": job.get("progress", 0),
-            "beat_url": job.get("beat_url")
-        },
+        data=job,
         message="Beat job in progress"
     )
 

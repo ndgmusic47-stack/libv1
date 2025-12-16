@@ -5,6 +5,7 @@ import uuid
 import shutil
 import asyncio
 import logging
+import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 import httpx
@@ -69,50 +70,54 @@ class BeatService:
         
         # Runtime check for API key before attempting to call Beatoven API
         if not self.api_key:
-            logger.warning("BEATOVEN_API_KEY is not set. Proceeding to fallback logic.")
-            return await self._handle_fallback_beat(
-                session_path=session_path,
-                session_id=session_id,
-                bpm=bpm,
-                mood=mood,
-                genre=genre,
-                duration_sec=duration_sec,
-                db=db
-            )
+            logger.error("BEATOVEN_API_KEY is not set - cannot call Beatoven API.")
+            # Explicit error instead of silent/demo fallback
+            raise Exception("BEATOVEN_API_KEY missing")
         
-        # Try Beatoven API first (key is available at this point)
+        # Try Beatoven API (non-blocking: do not poll or fallback here)
         try:
-            # 1. Call Beatoven compose API
+            # 1. Call Beatoven compose API to get a task_id
             task_id = await self._call_beatoven_compose(prompt_text)
-            
-            # 2. Poll for status and finalize
-            result = await self._poll_beatoven_status(
-                task_id=task_id,
-                session_path=session_path,
-                session_id=session_id,
-                mood=mood,
-                genre=genre,
-                bpm=bpm,
-                db=db
-            )
-            
-            if result:
-                return result
         except httpx.RequestError as e:
-            logger.warning(f"Beatoven API request failed: {e} - falling back to demo beat")
+            logger.error(f"Beatoven API request failed: {e}")
+            # Surface a clear error to the router / caller
+            raise Exception(f"Beatoven API request failed: {e}") from e
         except Exception as e:
-            logger.warning(f"Beatoven API failed: {e} - falling back to demo beat")
+            logger.error(f"Beatoven API failed: {e}")
+            # Let the router handle generic failures consistently
+            raise
+
+        # 1b. Persist minimal job manifest for later status lookups
+        try:
+            job_dir = MEDIA_DIR / task_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = job_dir / "job.json"
+            manifest = {
+                "session_id": session_id,
+                "mood": mood,
+                "genre": genre,
+                "bpm": bpm,
+                "duration_sec": duration_sec,
+                "provider": "beatoven",
+            }
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+            logger.info(f"Saved Beatoven job manifest for task {task_id} at {manifest_path}")
+        except Exception as e:
+            # Do not fail job creation if manifest persistence has issues
+            logger.warning(f"Failed to write Beatoven job manifest for task {task_id}: {e}")
         
-        # FALLBACK: Always return a beat (ALWAYS succeeds)
-        return await self._handle_fallback_beat(
-            session_path=session_path,
-            session_id=session_id,
-            bpm=bpm,
-            mood=mood,
-            genre=genre,
-            duration_sec=duration_sec,
-            db=db
-        )
+        # 2. Immediately return processing status so the client can poll
+        return {
+            "session_id": session_id,
+            "job_id": task_id,
+            "status": "processing",
+            "provider": "beatoven",
+            "progress": 5,
+            # Keep legacy fields for compatibility (no URL until ready)
+            "beat_url": None,
+            "url": None,
+        }
     
     async def _call_beatoven_compose(self, prompt_text: str) -> str:
         """
@@ -452,11 +457,195 @@ class BeatService:
     async def get_beat_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         """
         Get the status of a beat generation job.
-        
-        Returns:
-            Dict with job status or None if not found
+
+        Behavior:
+        - If a local beat file already exists at /media/{session_id}/beat.mp3 (from manifest) -> return ready.
+        - Else, treat job_id as the Beatoven task_id and poll Beatoven's task endpoint.
         """
-        # This is a stub implementation - would need actual job tracking
-        # For now, return None to indicate job not found
-        return None
+        # Try to load job manifest to recover session and metadata
+        session_id: Optional[str] = None
+        mood: Optional[str] = None
+        genre: Optional[str] = None
+        bpm: Optional[int] = None
+
+        manifest_path = MEDIA_DIR / job_id / "job.json"
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    manifest_data = json.load(f)
+                session_id = manifest_data.get("session_id")
+                mood = manifest_data.get("mood")
+                genre = manifest_data.get("genre")
+                bpm = manifest_data.get("bpm")
+            except Exception as e:
+                logger.warning(f"Failed to read Beatoven job manifest for task {job_id}: {e}")
+
+        # Primary ready check: session-based beat path from manifest
+        if session_id:
+            session_beat_file = MEDIA_DIR / session_id / "beat.mp3"
+            if session_beat_file.exists():
+                beat_url = f"/media/{session_id}/beat.mp3"
+                return {
+                    "job_id": job_id,
+                    "session_id": session_id,
+                    "status": "ready",
+                    "provider": "beatoven",
+                    "beat_url": beat_url,
+                    "audio_url": beat_url,
+                    "progress": 100,
+                }
+
+        # Backward-compatibility: if an old-style beat file exists under /media/{job_id}/beat.mp3,
+        # continue to report ready, even if no manifest is present.
+        beat_file = MEDIA_DIR / job_id / "beat.mp3"
+
+        # If we've already materialized the beat locally, just report ready.
+        if beat_file.exists():
+            beat_url = f"/media/{job_id}/beat.mp3"
+            return {
+                "job_id": job_id,
+                "status": "ready",
+                "provider": "beatoven",
+                "beat_url": beat_url,
+                "audio_url": beat_url,
+                "progress": 100,
+            }
+
+        # No local file yet – need to query Beatoven API for real-time status.
+        if not self.api_key:
+            logger.error("BEATOVEN_API_KEY is not set - cannot poll Beatoven task status.")
+            return {
+                "job_id": job_id,
+                "session_id": session_id,
+                "status": "error",
+                "provider": "beatoven",
+                "error": "BEATOVEN_API_KEY missing",
+            }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        status_url = f"https://public-api.beatoven.ai/api/v1/tasks/{job_id}"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                status_res = await client.get(status_url, headers=headers, timeout=30)
+
+                if not status_res.is_success:
+                    logger.warning(f"Beatoven status check failed: {status_res.status_code}")
+                    return {
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "status": "error",
+                        "provider": "beatoven",
+                        "error": f"Beatoven status check error: {status_res.status_code}",
+                    }
+
+                status_data = status_res.json()
+                status = status_data.get("status")
+
+                if status == "composed":
+                    meta = status_data.get("meta", {})
+                    audio_url = meta.get("track_url")
+                    if not audio_url:
+                        logger.error("Beatoven: track_url missing in composed task response")
+                        return {
+                            "job_id": job_id,
+                            "session_id": session_id,
+                            "status": "error",
+                            "provider": "beatoven",
+                            "error": "Beatoven: track_url missing",
+                        }
+
+                    if not session_id:
+                        logger.error(f"Beatoven task {job_id} composed but missing job manifest/session mapping")
+                        return {
+                            "job_id": job_id,
+                            "status": "error",
+                            "provider": "beatoven",
+                            "error": "Missing job manifest (session mapping)",
+                        }
+
+                    # Download and persist audio under /media/{session_id}/beat.mp3
+                    async with httpx.AsyncClient() as client_audio:
+                        audio_data = await client_audio.get(audio_url, timeout=60)
+                        audio_data.raise_for_status()
+
+                    session_beat_file = MEDIA_DIR / session_id / "beat.mp3"
+                    session_beat_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(session_beat_file, "wb") as f:
+                        f.write(audio_data.content)
+
+                    beat_url = f"/media/{session_id}/beat.mp3"
+                    logger.info(f"🎵 Beatoven task {job_id} composed and saved to {session_beat_file}")
+
+                    # Update project memory with minimal metadata (from manifest)
+                    try:
+                        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, None)
+                        await memory.update_metadata(tempo=bpm, mood=mood, genre=genre)
+                        await memory.add_asset("beat", beat_url, {"bpm": bpm, "mood": mood, "metadata": {}})
+                        await memory.advance_stage("beat", "lyrics")
+
+                        # Mirror legacy beat block structure
+                        beat_meta = {
+                            "bpm": bpm,
+                            "mood": mood,
+                            "genre": genre,
+                            "provider": "beatoven",
+                        }
+                        if "beat" not in memory.project_data:
+                            memory.project_data["beat"] = {}
+                        memory.project_data["beat"].update({
+                            "url": beat_url,
+                            "meta": beat_meta,
+                            "completed": True,
+                        })
+                        await memory.save()
+                    except Exception as mem_err:
+                        logger.warning(f"Failed to update project memory for Beatoven task {job_id}: {mem_err}")
+
+                    return {
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "status": "ready",
+                        "provider": "beatoven",
+                        "beat_url": beat_url,
+                        "audio_url": beat_url,
+                        "progress": 100,
+                    }
+
+                if status in ("composing", "running", "queued"):
+                    logger.info(f"⏳ Beatoven task {job_id} status: {status}")
+                    resp: Dict[str, Any] = {
+                        "job_id": job_id,
+                        "session_id": session_id,
+                        "status": "processing",
+                        "provider": "beatoven",
+                    }
+                    # Optional progress hint from provider, if present
+                    progress = status_data.get("progress")
+                    if isinstance(progress, (int, float)):
+                        resp["progress"] = int(progress)
+                    return resp
+
+                # Any other status is treated as an error
+                logger.warning(f"Unexpected Beatoven status for task {job_id}: {status}")
+                return {
+                    "job_id": job_id,
+                    "session_id": session_id,
+                    "status": "error",
+                    "provider": "beatoven",
+                    "error": f"Unexpected Beatoven status: {status}",
+                }
+        except Exception as e:
+            logger.error(f"Error while polling Beatoven status for task {job_id}: {e}")
+            return {
+                "job_id": job_id,
+                "session_id": session_id,
+                "status": "error",
+                "provider": "beatoven",
+                "error": str(e),
+            }
 

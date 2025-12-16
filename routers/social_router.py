@@ -120,7 +120,7 @@ async def navigate_project_stage(request: ProjectNavigationRequest):
     
     except ValueError as e:
         log_endpoint_event("/social/project/navigate", request.session_id, "error", {"error": str(e)})
-        return error_response(str(e), status_code=400)
+        return error_response(str(e), status=400)
     except Exception as e:
         log_endpoint_event("/social/project/navigate", request.session_id, "error", {"error": str(e)})
         return error_response(f"Navigation failed: {str(e)}")

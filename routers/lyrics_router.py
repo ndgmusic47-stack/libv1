@@ -119,7 +119,7 @@ async def write_song(
         log_endpoint_event("/songs/write", session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to generate lyrics",
-            status_code=500,
+            status=500,
             data={"session_id": session_id}
         )
 
@@ -161,7 +161,7 @@ async def generate_lyrics_from_beat(
         log_endpoint_event("/lyrics/from_beat", session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to generate lyrics from beat",
-            status_code=500,
+            status=500,
             data={"session_id": session_id}
         )
 
@@ -179,7 +179,7 @@ async def generate_free_lyrics(request: FreeLyricsRequest):
         log_endpoint_event("/lyrics/free", request.session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to generate lyrics",
-            status_code=500,
+            status=500,
             data={}
         )
 
@@ -205,7 +205,7 @@ async def refine_lyrics(request: LyricRefineRequest):
         log_endpoint_event("/lyrics/refine", request.session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to refine lyrics",
-            status_code=500,
+            status=500,
             data={}
         )
 
