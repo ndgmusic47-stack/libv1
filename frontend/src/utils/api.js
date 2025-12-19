@@ -239,6 +239,25 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    return handleResponse(response);
  },
 
+ generateAiVocal: async (sessionId, speakerId = 0, transpose = 0) => {
+   const response = await fetch(`${API_BASE}/voice/generate-ai-vocal`, {
+     method: "POST",
+     credentials: "include",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify({ 
+       session_id: sessionId, 
+       speaker_id: speakerId,
+       transpose: transpose
+     }),
+   });
+   const result = await handleResponse(response);
+   // Normalize vocal_url via normalizeMediaUrl
+   if (result.vocal_url) {
+     return { vocal_url: normalizeMediaUrl(result.vocal_url) };
+   }
+   return result;
+ },
+
 
 
 

@@ -15,6 +15,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const recordedChunksRef = useRef([]);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   // V20: Frontend audio validation
   const validateAudioFile = (file) => {
@@ -104,7 +106,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       // V20: Update sessionData with vocal file
       updateSessionData({
         vocalFile: fileUrl,
-        vocalUploaded: true
+        vocalUploaded: true,
+        vocalSource: "guide"
       });
       
       // V20: Auto-complete upload stage
@@ -277,7 +280,8 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
       updateSessionData({
         songFile: fileUrl,
         vocalFile: fileUrl, // compat
-        vocalUploaded: true
+        vocalUploaded: true,
+        vocalSource: "ai_song"
       });
 
       setGenerationStatus('AI song generated successfully!');
@@ -411,6 +415,74 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
             </motion.button>
           </div>
         )}
+
+        {/* AI Artists Section */}
+        <div className="w-full max-w-2xl space-y-3">
+          <p className="text-sm text-studio-white/70 font-montserrat font-semibold">AI Artists</p>
+          <p className="text-xs text-studio-white/50 font-poppins">Step 1: Record or upload a GUIDE vocal</p>
+          <p className="text-xs text-studio-white/50 font-poppins">Step 2: Generate AI Vocal</p>
+          {(() => {
+            const hasVocal = !!sessionData?.vocalFile;
+            const isGuide = sessionData?.vocalSource === "guide" || !sessionData?.vocalSource;
+            const isAiSong = sessionData?.vocalSource === "ai_song";
+            const isDisabled = !hasVocal || aiGenerating || isAiSong || !sessionId;
+            
+            return (
+              <>
+                <motion.button
+                  onClick={async () => {
+                    if (!sessionId || !sessionData?.vocalFile) {
+                      setAiError('Please upload a guide vocal recording first.');
+                      return;
+                    }
+
+                    setAiGenerating(true);
+                    setAiError(null);
+
+                    try {
+                      const result = await api.generateAiVocal(sessionId);
+                      const vocalUrl = result.vocal_url || result.data?.vocal_url;
+                      if (vocalUrl) {
+                        updateSessionData({ vocalFile: vocalUrl, vocalSource: "ai_rvc" });
+                      } else {
+                        setAiError('Failed to get vocal URL from response.');
+                      }
+                    } catch (err) {
+                      setAiError(err.message || 'AI vocal generation failed. Please try again.');
+                    } finally {
+                      setAiGenerating(false);
+                    }
+                  }}
+                  disabled={isDisabled}
+                  className={`
+                    w-full py-3 px-6 rounded-lg font-montserrat font-semibold
+                    transition-all duration-300
+                    ${isDisabled
+                      ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
+                      : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
+                    }
+                  `}
+                  whileHover={isDisabled ? {} : { scale: 1.02 }}
+                  whileTap={isDisabled ? {} : { scale: 0.98 }}
+                >
+                  {aiGenerating ? 'Generating AI Vocal...' : 'Generate AI Vocal'}
+                </motion.button>
+                {!hasVocal && (
+                  <p className="text-xs text-studio-white/60 font-poppins">Record or upload a guide vocal first.</p>
+                )}
+                {hasVocal && isAiSong && (
+                  <p className="text-xs text-studio-white/60 font-poppins">AI Song output can't be used as a guide. Record/upload a guide vocal.</p>
+                )}
+                {hasVocal && isGuide && (
+                  <p className="text-xs text-studio-white/60 font-poppins">Uses your guide vocal to generate a final AI vocal stem.</p>
+                )}
+              </>
+            );
+          })()}
+          {aiError && (
+            <p className="text-red-400 text-sm">{aiError}</p>
+          )}
+        </div>
 
         {error && (
           <p className="text-red-400 text-sm">{error}</p>

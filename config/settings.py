@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Environment configuration
     env: Optional[str] = Field(default=None, alias="ENV")
     
+    # RVC Gradio configuration
+    rvc_gradio_url: Optional[str] = Field(
+        default="https://9zbdd24ix0hgj4-7897.proxy.runpod.net",
+        alias="RVC_GRADIO_URL"
+    )
+    
     # Configuration class for Pydantic v1 (also works in v2 with deprecation warning)
     class Config:
         env_file = ".env"

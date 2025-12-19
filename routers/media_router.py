@@ -20,6 +20,7 @@ from backend.utils.responses import success_response, error_response
 from utils.shared_utils import gtts_speak
 from config.settings import MEDIA_DIR
 from services.replicate_song_service import replicate_generate_song_yue
+from services.rvc_gradio_service import RvcGradioService
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,12 @@ class GenerateSongRequest(BaseModel):
     lyrics: Optional[str] = None
     lyrics_url: Optional[str] = None
     style: Optional[str] = "motivational hip-hop / rock"
+
+
+class GenerateAiVocalRequest(BaseModel):
+    session_id: str
+    speaker_id: Optional[int] = 0
+    transpose: Optional[float] = 0.0
 
 
 # === FIX 1: Add alias route to match frontend calls ===
@@ -360,3 +367,136 @@ async def generate_song(
     except Exception as e:
         logger.error(f"Error generating song: {e}", exc_info=True)
         return error_response(f"Failed to generate song: {str(e)}", status=500)
+
+
+# Create voice router for RVC endpoints (using /api/voice prefix)
+voice_router = APIRouter(prefix="/api/voice")
+
+
+@voice_router.post("/generate-ai-vocal")
+async def generate_ai_vocal(
+    request: GenerateAiVocalRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate AI vocal using RVC conversion via Gradio.
+    
+    Body: { session_id: str, speaker_id?: int, transpose?: float }
+    Returns: { session_id, vocal_url }
+    """
+    session_id = request.session_id
+    user_id = None
+    
+    try:
+        # Load project memory
+        memory = await get_or_create_project_memory(session_id, MEDIA_DIR, user_id, db)
+        
+        # Find the most recent uploaded vocal recording
+        recordings_dir = MEDIA_DIR / session_id / "recordings"
+        guide_vocal_path = None
+        
+        # Priority 1: Check if project memory has assets.vocals with URL
+        vocals_assets = memory.project_data.get("assets", {}).get("vocals", [])
+        if vocals_assets and len(vocals_assets) > 0:
+            # Get the most recent vocal (last in list)
+            latest_vocal = vocals_assets[-1]
+            if isinstance(latest_vocal, dict) and "url" in latest_vocal:
+                vocal_url = latest_vocal["url"]
+                if vocal_url.startswith("/media/"):
+                    rel_path = vocal_url.replace("/media/", "", 1).lstrip("/")
+                    guide_vocal_path = MEDIA_DIR / rel_path
+                    if not guide_vocal_path.exists():
+                        guide_vocal_path = None
+        
+        # Priority 2: Find latest file in recordings directory by mtime
+        if not guide_vocal_path or not guide_vocal_path.exists():
+            if recordings_dir.exists():
+                # Get all files in recordings directory
+                files = []
+                for file_path in recordings_dir.iterdir():
+                    if file_path.is_file():
+                        # Get modification time
+                        mtime = await asyncio.to_thread(file_path.stat)
+                        files.append((mtime.st_mtime, file_path))
+                
+                if files:
+                    # Sort by mtime (most recent first)
+                    files.sort(key=lambda x: x[0], reverse=True)
+                    guide_vocal_path = files[0][1]
+        
+        # Validate guide vocal exists
+        if not guide_vocal_path or not guide_vocal_path.exists():
+            return error_response("No guide vocal found. Please upload a vocal recording first.", status=400)
+        
+        logger.info(f"Using guide vocal: {guide_vocal_path} for RVC conversion")
+        
+        # Initialize RVC service
+        rvc_service = RvcGradioService()
+        
+        # Upload audio to Gradio
+        try:
+            server_audio_path = await rvc_service.upload_audio(guide_vocal_path)
+        except Exception as e:
+            logger.error(f"Failed to upload audio to Gradio: {e}", exc_info=True)
+            return error_response(f"Failed to upload audio to Gradio: {str(e)}", status=502)
+        
+        # Convert using RVC
+        try:
+            info_text, output_audio_ref = await rvc_service.convert(
+                server_audio_path,
+                speaker_id=request.speaker_id or 0,
+                transpose=request.transpose or 0.0,
+            )
+        except Exception as e:
+            logger.error(f"RVC conversion failed: {e}", exc_info=True)
+            return error_response(f"RVC conversion failed: {str(e)}", status=502)
+        
+        # Download output
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        output_path = recordings_dir / "ai_vocals.wav"
+        
+        try:
+            await rvc_service.download_output(output_audio_ref, output_path)
+        except Exception as e:
+            logger.error(f"Failed to download RVC output: {e}", exc_info=True)
+            return error_response(f"Failed to download RVC output: {str(e)}", status=502)
+        
+        # Verify output file exists
+        if not output_path.exists():
+            return error_response("RVC output file was not created", status=500)
+        
+        vocal_url = f"/media/{session_id}/recordings/ai_vocals.wav"
+        
+        # Update project memory
+        if "assets" not in memory.project_data:
+            memory.project_data["assets"] = {}
+        
+        # Update assets.vocals
+        memory.project_data["assets"]["vocals"] = [{
+            "url": vocal_url,
+            "added_at": datetime.now().isoformat(),
+            "metadata": {"source": "rvc"}
+        }]
+        
+        # Update assets.song
+        memory.project_data["assets"]["song"] = {
+            "url": vocal_url,
+            "added_at": datetime.now().isoformat(),
+            "metadata": {"source": "rvc"}
+        }
+        
+        await memory.save()
+        
+        logger.info(f"AI vocal generated successfully: {vocal_url} for session {session_id}")
+        
+        return success_response(
+            data={
+                "session_id": session_id,
+                "vocal_url": vocal_url,
+            },
+            message="AI vocal generated"
+        )
+    
+    except Exception as e:
+        logger.error(f"Error generating AI vocal: {e}", exc_info=True)
+        return error_response(f"Failed to generate AI vocal: {str(e)}", status=500)

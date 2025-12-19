@@ -19,7 +19,7 @@ from routers.content_router import router as content_router
 from routers.billing_router import billing_router
 from routers.beat_router import beat_router
 from routers.lyrics_router import lyrics_router
-from routers.media_router import media_router
+from routers.media_router import media_router, voice_router
 from routers.mix_router import mix_router, mix_config_router
 from routers.mix_ws_router import router as mix_ws_router
 from routers.release_router import release_router
@@ -206,6 +206,7 @@ app.include_router(billing_router)
 app.include_router(beat_router)
 app.include_router(lyrics_router)
 app.include_router(media_router)
+app.include_router(voice_router)
 app.include_router(mix_router)
 app.include_router(mix_config_router)
 app.include_router(mix_ws_router)
