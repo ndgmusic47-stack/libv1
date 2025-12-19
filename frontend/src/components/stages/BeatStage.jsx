@@ -12,6 +12,31 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [beatMetadata, setBeatMetadata] = useState(null);
+  const [statusMessage, setStatusMessage] = useState(null);
+
+  // Poll helper for beat status
+  const pollBeatStatus = async (jobId, { intervalMs = 2000, timeoutMs = 180000 } = {}) => {
+    const startTime = Date.now();
+    
+    while (true) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= timeoutMs) {
+        throw new Error("Beat generation timed out. Please try again.");
+      }
+      
+      const status = await api.getBeatStatus(jobId);
+      
+      if (status.status === "ready" && status.beat_url) {
+        return status;
+      }
+      
+      if (status.status === "error") {
+        throw new Error(status.error || status.message || "Beat generation failed");
+      }
+      
+      await new Promise(r => setTimeout(r, intervalMs));
+    }
+  };
 
   const handleGenerateClick = () => {
     if (!promptText.trim()) {
@@ -30,13 +55,33 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
     setIsGenerating(true);
     setLoading(true);
     setError(null);
+    setStatusMessage(null);
     
     try {
       // Call beat creation API with promptText, mood, and genre
       const result = await api.createBeat(promptText, mood, sessionData.genre || 'hip hop', sessionId);
       
+      let finalResult = result;
+      
+      // If status is ready and beat_url exists, use it directly
+      if (result.status === "ready" && result.beat_url) {
+        // Beat is ready immediately
+      } else if (result.status === "processing" && result.job_id) {
+        // Poll until ready
+        setStatusMessage("Generating beat…");
+        updateSessionData({ beatJobId: result.job_id });
+        finalResult = await pollBeatStatus(result.job_id);
+      } else {
+        throw new Error("Beat generation did not return a job id.");
+      }
+      
+      // Ensure we have a valid beat_url before proceeding
+      if (!finalResult.beat_url) {
+        throw new Error("Beat generation completed but no beat URL was returned.");
+      }
+      
       // Extract metadata from result if available
-      const metadata = result.metadata || null;
+      const metadata = finalResult.metadata || result.metadata || null;
       if (metadata) {
         setBeatMetadata(metadata);
       }
@@ -45,13 +90,10 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
       updateSessionData({ 
         mood: mood,
         beatMetadata: metadata,   // includes bpm, key, duration
-        beatFile: result.beat_url || result.url,  // already returned
+        beatFile: finalResult.beat_url,
       });
       
-      // For now, do NOT call syncProject here.
-      // We rely on the direct API response for beatFile in this stage.
-      
-      // Mark beat stage as complete
+      // Mark beat stage as complete only after beatFile is set
       if (completeStage) {
         completeStage('beat');
       }
@@ -60,6 +102,7 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
     } finally {
       setLoading(false);
       setIsGenerating(false);
+      setStatusMessage(null);
     }
   };
 
@@ -122,6 +165,10 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
 
           {error && (
             <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
+
+          {statusMessage && (
+            <p className="text-studio-white/70 text-sm text-center">{statusMessage}</p>
           )}
 
           {sessionData.beatFile && (

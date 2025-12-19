@@ -10,6 +10,10 @@ from pathlib import Path
 from services.lyrics_service import LyricsService
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
+from project_memory import get_or_create_project_memory
+from config.settings import MEDIA_DIR
+from database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Create router
 lyrics_router = APIRouter(prefix="/api/lyrics", tags=["Lyrics & Songwriting"])
@@ -34,6 +38,9 @@ class LyricRefineRequest(BaseModel):
     structured_lyrics: Optional[dict] = Field(default=None, description="V18.1: Structured lyrics object with sections")
     rhythm_map: Optional[dict] = Field(default=None, description="V18.1: Rhythm approximation map per section")
     session_id: Optional[str] = Field(None, description="Optional session ID for persistence")
+
+class ClearLyricsRequest(BaseModel):
+    session_id: str = Field(..., description="Session ID for the project")
 
 # Service instance
 lyrics_service = LyricsService()
@@ -205,6 +212,37 @@ async def refine_lyrics(request: LyricRefineRequest):
         log_endpoint_event("/lyrics/refine", request.session_id, "error", {"error": str(e)})
         return error_response(
             "Failed to refine lyrics",
+            status=500,
+            data={}
+        )
+
+
+@lyrics_router.post("/clear")
+async def clear_lyrics(request: ClearLyricsRequest, db: AsyncSession = Depends(get_db)):
+    """Clear lyrics from project memory"""
+    try:
+        memory = await get_or_create_project_memory(request.session_id, MEDIA_DIR, None, db)
+        
+        # Ensure memory.project_data["lyrics"] is a dict; then clear it
+        if not isinstance(memory.project_data.get("lyrics"), dict):
+            memory.project_data["lyrics"] = {}
+        memory.project_data["lyrics"] = {"text": "", "meta": {}, "completed": False}
+        
+        # Also clear lyrics_text
+        memory.project_data["lyrics_text"] = ""
+        
+        # Persist changes
+        await memory.save()
+        
+        log_endpoint_event("/lyrics/clear", request.session_id, "success", {})
+        return success_response(
+            data={"ok": True},
+            message="Lyrics cleared"
+        )
+    except Exception as e:
+        log_endpoint_event("/lyrics/clear", request.session_id, "error", {"error": str(e)})
+        return error_response(
+            "Failed to clear lyrics",
             status=500,
             data={}
         )

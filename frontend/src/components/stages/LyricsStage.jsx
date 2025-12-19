@@ -121,6 +121,10 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       setLyrics(sessionData.lyricsData);
       setError('');
     }
+    // If sessionData.lyricsData is null, don't set lyrics (prevents rehydration after clear)
+    if (sessionData && sessionData.lyricsData === null && lyrics) {
+      setLyrics(null);
+    }
   }, [sessionData, lyrics]);
 
   const handleGenerateLyrics = async () => {
@@ -221,6 +225,21 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
       console.error('LyricsStage error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClearLyrics = async () => {
+    // Immediately clear UI + session
+    setLyrics(null);
+    updateSessionData({ lyricsData: null });
+    
+    // Call backend to clear from project memory
+    try {
+      await api.clearLyrics(sessionId);
+      setError('');
+    } catch (err) {
+      console.error('Failed to clear lyrics:', err);
+      setError('Failed to clear lyrics. Please try again.');
     }
   };
 
@@ -400,7 +419,7 @@ export default function LyricsStage({ openUpgradeModal, sessionId, sessionData, 
               </div>
               
               <motion.button
-                onClick={() => setLyrics(null)}
+                onClick={handleClearLyrics}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}

@@ -131,6 +131,13 @@ export const api = {
    return handleResponse(response);
  },
 
+ getBeatStatus: async (jobId) => {
+   const response = await fetch(`${API_BASE}/beats/status/${jobId}`, {
+     credentials: "include"
+   });
+   return handleResponse(response);
+ },
+
 generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
   const response = await fetch(`${API_BASE}/lyrics/songs/write`, {
      method: 'POST',
@@ -195,6 +202,16 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    return handleResponse(response);
  },
 
+ clearLyrics: async (sessionId) => {
+   const response = await fetch(`${API_BASE}/lyrics/clear`, {
+     method: 'POST',
+     credentials: "include",
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ session_id: sessionId })
+   });
+   return handleResponse(response);
+ },
+
  uploadRecording: async (file, sessionId = null) => {
    const formData = new FormData();
    formData.append('file', file);
@@ -204,16 +221,6 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
      method: "POST",
      credentials: "include",
      body: formData,
-   });
-   return handleResponse(response);
- },
-
- generateVocal: async (sessionId, text) => {
-   const response = await fetch(`${API_BASE}/media/generate/vocal`, {
-     method: "POST",
-     credentials: "include",
-     headers: { "Content-Type": "application/json" },
-     body: JSON.stringify({ session_id: sessionId, text }),
    });
    return handleResponse(response);
  },

@@ -251,49 +251,6 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
     return null;
   };
 
-  const handleGenerateVocal = async () => {
-    if (!allowed) {
-      openUpgradeModal();
-      return;
-    }
-
-    const lyricsText = getLyricsText();
-    if (!lyricsText || !lyricsText.trim()) {
-      setError('No lyrics available. Please generate lyrics first.');
-      return;
-    }
-
-    setGenerating(true);
-    setError(null);
-    setGenerationStatus('Generating vocal...');
-
-    try {
-      const result = await api.generateVocal(sessionId, lyricsText);
-      
-      // Normalize returned file_path via normalizeMediaUrl
-      const fileUrl = normalizeMediaUrl(result.file_path);
-      
-      // Update session data
-      updateSessionData({
-        songFile: fileUrl,
-        vocalFile: fileUrl, // compat
-        vocalUploaded: true
-      });
-
-      setGenerationStatus('Vocal generated successfully!');
-      
-      // Auto-complete upload stage
-      if (completeStage) {
-        completeStage('upload');
-      }
-    } catch (err) {
-      setError(err.message || 'Vocal generation failed. Please try again.');
-      setGenerationStatus(null);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   const handleGenerateSong = async () => {
     if (!allowed) {
       openUpgradeModal();
@@ -433,25 +390,9 @@ export default function UploadStage({ openUpgradeModal, sessionId, sessionData, 
           )}
         </div>
 
-        {/* Generate Vocal Buttons */}
+        {/* Generate AI Song Button */}
         {sessionData?.lyricsData && (
           <div className="w-full max-w-2xl space-y-3">
-            <motion.button
-              onClick={handleGenerateVocal}
-              disabled={generating || uploading}
-              className={`
-                w-full py-3 px-6 rounded-lg font-montserrat font-semibold
-                transition-all duration-300
-                ${generating || uploading
-                  ? 'bg-studio-gray text-studio-white/50 cursor-not-allowed'
-                  : 'bg-studio-red hover:bg-studio-red/80 text-studio-white'
-                }
-              `}
-              whileHover={generating || uploading ? {} : { scale: 1.02 }}
-              whileTap={generating || uploading ? {} : { scale: 0.98 }}
-            >
-              {generating ? generationStatus || 'Generating...' : 'Spoken TTS Preview'}
-            </motion.button>
             <motion.button
               onClick={handleGenerateSong}
               disabled={generating || uploading}
