@@ -382,3 +382,4 @@ if (project.lyrics?.text) {
 
 
 
+
