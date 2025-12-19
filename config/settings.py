@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     
     # RVC Gradio configuration
     rvc_gradio_url: Optional[str] = Field(
-        default="https://9zbdd24ix0hgj4-7897.proxy.runpod.net",
+        default=None,
         alias="RVC_GRADIO_URL"
     )
     

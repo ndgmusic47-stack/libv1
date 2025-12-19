@@ -47,16 +47,6 @@ class GenerateAiVocalRequest(BaseModel):
     transpose: Optional[float] = 0.0
 
 
-# === FIX 1: Add alias route to match frontend calls ===
-@media_router.post("/upload/vocal")
-async def upload_vocal_alias(
-    file: UploadFile = File(...),
-    session_id: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
-):
-    """Alias for /upload-audio to match frontend expectation at /api/media/upload/vocal"""
-    return await upload_audio(file, session_id, db)
-
 # Existing upload route
 @media_router.post("/upload-audio")
 async def upload_audio(
@@ -121,7 +111,7 @@ async def upload_audio(
         data={
             "session_id": session_id,
             "file_url": file_url,
-            "file_path": file_url,  # <== FIX 2: Add file_path to satisfy frontend expectation
+            "file_path": file_url,
         },
         message="Vocal uploaded"
     )
@@ -136,7 +126,7 @@ async def generate_vocal(
     Generate vocal audio using gTTS and save to recordings directory.
     
     Body: { session_id: str, text: str }
-    Returns: { session_id, file_url, file_path }
+    Returns: { session_id, file_url }
     """
     # Validate text is not empty
     if not request.text or not request.text.strip():
@@ -216,7 +206,7 @@ async def generate_vocal(
             data={
                 "session_id": session_id,
                 "file_url": file_url,
-                "file_path": file_url,  # Match upload response format
+                "file_path": file_url,
             },
             message="Vocal generated"
         )
@@ -431,11 +421,18 @@ async def generate_ai_vocal(
         logger.info(f"Using guide vocal: {guide_vocal_path} for RVC conversion")
         
         # Initialize RVC service
-        rvc_service = RvcGradioService()
+        try:
+            rvc_service = RvcGradioService()
+        except RuntimeError as e:
+            logger.error(f"RVC service initialization failed: {e}", exc_info=True)
+            return error_response(None, status=502, message=str(e))
         
         # Upload audio to Gradio
         try:
             server_audio_path = await rvc_service.upload_audio(guide_vocal_path)
+        except RuntimeError as e:
+            logger.error(f"RVC service error: {e}", exc_info=True)
+            return error_response(None, status=502, message=str(e))
         except Exception as e:
             logger.error(f"Failed to upload audio to Gradio: {e}", exc_info=True)
             return error_response(f"Failed to upload audio to Gradio: {str(e)}", status=502)
@@ -447,6 +444,9 @@ async def generate_ai_vocal(
                 speaker_id=request.speaker_id or 0,
                 transpose=request.transpose or 0.0,
             )
+        except RuntimeError as e:
+            logger.error(f"RVC conversion failed: {e}", exc_info=True)
+            return error_response(None, status=502, message=str(e))
         except Exception as e:
             logger.error(f"RVC conversion failed: {e}", exc_info=True)
             return error_response(f"RVC conversion failed: {str(e)}", status=502)
@@ -457,6 +457,9 @@ async def generate_ai_vocal(
         
         try:
             await rvc_service.download_output(output_audio_ref, output_path)
+        except RuntimeError as e:
+            logger.error(f"Failed to download RVC output: {e}", exc_info=True)
+            return error_response(None, status=502, message=str(e))
         except Exception as e:
             logger.error(f"Failed to download RVC output: {e}", exc_info=True)
             return error_response(f"Failed to download RVC output: {str(e)}", status=502)

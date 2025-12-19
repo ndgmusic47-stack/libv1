@@ -15,9 +15,6 @@ from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Default RVC Gradio URL (RunPod proxy)
-RVC_GRADIO_URL = settings.rvc_gradio_url or "https://9zbdd24ix0hgj4-7897.proxy.runpod.net"
-
 
 class RvcGradioService:
     """Service for RVC voice conversion using Gradio client"""
@@ -29,21 +26,70 @@ class RvcGradioService:
         Args:
             gradio_url: Gradio server URL (defaults to RVC_GRADIO_URL from settings)
         """
-        self.gradio_url = gradio_url or RVC_GRADIO_URL
+        self.gradio_url = gradio_url or settings.rvc_gradio_url
+        if not self.gradio_url:
+            raise RuntimeError("RVC_GRADIO_URL not set.")
         self.client = None
         self._client_initialized = False
+        self._preflight_ok = False
+        self._preflight_lock = asyncio.Lock()
     
     async def _ensure_client(self):
         """Initialize Gradio client if not already initialized"""
-        if not self._client_initialized:
-            try:
-                # Initialize client in thread pool (gradio_client is sync)
-                self.client = await asyncio.to_thread(Client, self.gradio_url)
-                self._client_initialized = True
-                logger.info(f"Gradio client initialized for {self.gradio_url}")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gradio client: {e}", exc_info=True)
-                raise
+        async with self._preflight_lock:
+            if not self._client_initialized:
+                # Perform preflight check before creating Client
+                if not self._preflight_ok:
+                    await self._preflight_check()
+                
+                try:
+                    # Initialize client in thread pool (gradio_client is sync)
+                    self.client = await asyncio.to_thread(Client, self.gradio_url)
+                    self._client_initialized = True
+                    logger.info(f"Gradio client initialized for {self.gradio_url}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Gradio client: {e}", exc_info=True)
+                    raise
+    
+    async def _preflight_check(self):
+        """Check if Gradio endpoint is reachable by requesting /config"""
+        config_url = f"{self.gradio_url.rstrip('/')}/config"
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                response = await client.get(config_url)
+                
+                if response.status_code != 200:
+                    # Log error with details
+                    response_text = response.text[:200] if response.text else "(empty response)"
+                    logger.error(
+                        f"RVC Gradio preflight check failed: "
+                        f"base_url={self.gradio_url}, "
+                        f"status_code={response.status_code}, "
+                        f"response_text={response_text}"
+                    )
+                    raise RuntimeError(
+                        f"RVC service misconfigured: Gradio endpoint not reachable at {self.gradio_url} (expected /config)."
+                    )
+                
+                self._preflight_ok = True
+                logger.info(f"RVC Gradio preflight check passed for {self.gradio_url}")
+        except httpx.TimeoutException:
+            logger.error(
+                f"RVC Gradio preflight check timeout: base_url={self.gradio_url}"
+            )
+            raise RuntimeError(
+                f"RVC service misconfigured: Gradio endpoint timeout at {self.gradio_url} (expected /config)."
+            )
+        except httpx.RequestError as e:
+            logger.error(
+                f"RVC Gradio preflight check request error: base_url={self.gradio_url}, error={e}"
+            )
+            raise RuntimeError(
+                f"RVC service misconfigured: Gradio endpoint not reachable at {self.gradio_url} (expected /config)."
+            )
+        except RuntimeError:
+            # Re-raise our custom RuntimeError
+            raise
     
     async def upload_audio(self, local_path: Path) -> str:
         """
