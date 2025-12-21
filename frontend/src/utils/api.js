@@ -217,7 +217,7 @@ generateLyrics: async (genre, mood, theme = '', sessionId = null) => {
    formData.append('file', file);
    if (sessionId) formData.append('session_id', sessionId);
 
-   const response = await fetch(`${API_BASE}/media/upload/vocal`, {
+   const response = await fetch(`${API_BASE}/media/upload-audio`, {
      method: "POST",
      credentials: "include",
      body: formData,
