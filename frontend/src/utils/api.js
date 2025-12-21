@@ -33,7 +33,12 @@ export const normalizeMediaUrl = (url) => {
 const handleResponse = async (response) => {
  // First check HTTP status
  if (!response.ok) {
-   const result = await response.json().catch(() => ({}));
+   let result;
+   try {
+     result = await response.json();
+   } catch (e) {
+     throw new Error('Invalid JSON response from API');
+   }
    
    // Handle 400 errors gracefully
    if (response.status === 400) {
@@ -50,7 +55,12 @@ const handleResponse = async (response) => {
    throw error;
  }
 
- const result = await response.json().catch(() => ({}));
+ let result;
+ try {
+   result = await response.json();
+ } catch (e) {
+   throw new Error('Invalid JSON response from API');
+ }
 
  // Phase 8.4: Check for paywall errors even if response.ok is true (in case backend returns 403 but ok: false)
  if (!result.ok) {
