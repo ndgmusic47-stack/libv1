@@ -685,3 +685,5 @@ export default defineConfig({
 **Recommended Fix:**
 - Add Vite proxy configuration for `/api` and `/media` paths in dev
 
+
+

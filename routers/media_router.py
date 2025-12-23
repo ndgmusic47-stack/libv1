@@ -21,6 +21,7 @@ from utils.shared_utils import gtts_speak
 from config.settings import MEDIA_DIR
 from services.replicate_song_service import replicate_generate_song_yue
 from services.rvc_gradio_service import RvcGradioService
+from utils.session_manager import VALID_SESSION_ID_PATTERN
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,9 @@ async def generate_song(
     """
     session_id = request.session_id
     user_id = None
+    
+    if not VALID_SESSION_ID_PATTERN.match(session_id):
+        return error_response("Invalid session")
     
     try:
         # Load project memory

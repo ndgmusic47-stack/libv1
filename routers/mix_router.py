@@ -3,8 +3,9 @@ Mix Router - API endpoints for audio mixing
 """
 import logging
 import asyncio
+import os
 from pathlib import Path
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +19,7 @@ from utils.mix.config_apply import apply_recipe
 from pydantic import BaseModel
 from backend.utils.responses import success_response, error_response
 from utils.shared_utils import log_endpoint_event
+from utils.session_manager import SessionManager
 from jobs.mix_job_manager import MixJobManager, JOBS
 from utils.mix.timeline import get_timeline
 from services.transport_service import play, pause, stop, seek
@@ -25,6 +27,11 @@ from project_memory import get_or_create_project_memory
 from config.settings import MEDIA_DIR
 
 logger = logging.getLogger(__name__)
+
+# Mix execution concurrency and timeout controls
+MIX_MAX_CONCURRENT = int(os.getenv("MIX_MAX_CONCURRENT", "2"))
+MIX_TIMEOUT_SECONDS = int(os.getenv("MIX_TIMEOUT_SECONDS", "1200"))  # 20 min default
+MIX_SEMAPHORE = asyncio.Semaphore(MIX_MAX_CONCURRENT)
 
 # Create router
 mix_router = APIRouter(prefix="/mix", tags=["Mix & Mastering"])
@@ -64,6 +71,10 @@ async def start_mix(
     """
     Start a mix job using the DSP engine.
     """
+    user = SessionManager.get_user(project_id)
+    if user is None:
+        return error_response("Invalid session")
+    
     try:
         session_id = project_id
         
@@ -106,6 +117,36 @@ async def start_mix(
         return error_response("MIX_START_ERROR", 500, f"Failed to start mix: {str(e)}")
 
 
+@mix_router.get("/projects/{project_id}/mix/status")
+async def get_mix_status_with_job_id(
+    project_id: str,
+    job_id: str = Query(None, description="Job ID"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Check mix job status (alias endpoint for frontend compatibility).
+    """
+    try:
+        if not job_id:
+            return error_response("JOB_ID_REQUIRED", 400, "Job ID is required")
+        
+        job_status = await MixJobManager.get_job_status(job_id)
+        log_endpoint_event(f"/projects/{project_id}/mix/status", project_id, "success", {})
+        
+        # MixJobManager.get_job_status already returns UI-safe format with is_error
+        if job_status.get("is_error"):
+            return error_response("JOB_NOT_FOUND", 404, job_status.get("error", "Job not found"))
+        
+        return success_response(
+            data=job_status.get("data"),
+            message="Job status retrieved successfully"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get job status for job {job_id}: {e}")
+        log_endpoint_event(f"/projects/{project_id}/mix/status", project_id, "error", {"error": str(e)})
+        return error_response("JOB_STATUS_ERROR", 500, f"Failed to get job status: {str(e)}")
+
+
 @mix_router.get("/{project_id}/mix/job/{job_id}/status")
 async def get_job_status(
     project_id: str,
@@ -141,6 +182,10 @@ async def get_mix_preview(
     """
     Returns final_mix.wav if exists.
     """
+    user = SessionManager.get_user(project_id)
+    if user is None:
+        return error_response("Invalid session")
+    
     try:
         from config.settings import MEDIA_DIR
         from services.mix_service import STORAGE_MIX_OUTPUTS
@@ -182,7 +227,7 @@ async def get_mix_timeline(job_id: str):
 async def get_mix_visual(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return error_response("Job not found")
+        return success_response(None, message="No data available (job missing or expired)")
     return success_response(job.extra.get("visual", None))
 
 
@@ -190,7 +235,7 @@ async def get_mix_visual(job_id: str):
 async def get_scope(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return error_response("Job not found")
+        return success_response(None, message="No data available (job missing or expired)")
     return success_response(job.extra.get("realtime_scope", None))
 
 
@@ -198,7 +243,7 @@ async def get_scope(job_id: str):
 async def list_streams(job_id: str):
     job = JOBS.get(job_id)
     if not job:
-        return error_response("Job not found")
+        return success_response(None, message="No data available (job missing or expired)")
 
     streams = job.extra.get("realtime_stream", {})
     return success_response({
@@ -217,13 +262,26 @@ async def _process_mix_job(job_id: str, session_id: str, stems: dict):
         job = JOBS.get(job_id)
         config = job.extra.get("config")
         
-        # Run mix (progress tracking is handled inside MixService.mix)
-        result = await MixService.mix(session_id, stems, config=config, job_id=job_id)
+        # Optional: Update job state to show waiting
+        MixJobManager.update(job_id, state="queued", message="Waiting for mixer slot", progress=0)
+        
+        # Acquire semaphore to enforce concurrency limit
+        async with MIX_SEMAPHORE:
+            MixJobManager.update(job_id, state="running", message="Mix started", progress=1)
+            
+            # Run mix with timeout (progress tracking is handled inside MixService.mix)
+            result = await asyncio.wait_for(
+                MixService.mix(session_id, stems, config=config, job_id=job_id),
+                timeout=MIX_TIMEOUT_SECONDS
+            )
         
         if result.get("is_error"):
             logger.error(f"Mix job {job_id} failed: {result.get('error')}")
         else:
             logger.info(f"Mix job {job_id} completed successfully")
+    except asyncio.TimeoutError:
+        MixJobManager.update(job_id, state="error", progress=100, message="Mix timeout", error="Mix exceeded timeout")
+        logger.error(f"Mix job {job_id} timed out after {MIX_TIMEOUT_SECONDS} seconds")
     except Exception as e:
         MixJobManager.update(job_id, state="error", progress=100, message="Mix failed", error=str(e))
         logger.error(f"Mix job {job_id} failed with exception: {e}")
@@ -279,6 +337,10 @@ class ApplyConfigRequest(BaseModel):
 
 @mix_config_router.post("/config/apply")
 async def apply_mix_config(request: ApplyConfigRequest):
+    user = SessionManager.get_user(request.session_id)
+    if user is None:
+        return error_response("Invalid session")
+    
     config = apply_recipe(request.recipe, request.track_roles)
     # Serialize Pydantic model to dict (compatible with both v1 and v2)
     if hasattr(config, 'model_dump'):
@@ -299,6 +361,10 @@ async def run_clean_wrapper(
     Temporary compatibility wrapper.
     Always triggers the DSP mix engine via the job system.
     """
+    user = SessionManager.get_user(project_id)
+    if user is None:
+        return error_response("Invalid session")
+    
     try:
         session_id = project_id
         

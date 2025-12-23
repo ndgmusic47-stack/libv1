@@ -51,7 +51,18 @@ async def mix_ws_status(websocket: WebSocket, job_id: str):
         while True:
             job = JOBS.get(job_id)
             if not job:
-                await websocket.send_json({"error": "Job not found"})
+                await websocket.send_json({
+                    "job_id": job_id,
+                    "state": "expired",
+                    "progress": 100,
+                    "message": "Job expired or not found",
+                    "error": None,
+                    "visual": None,
+                    "realtime_meters": None,
+                    "realtime_spectra": None,
+                    "realtime_scope": None,
+                    "timeline": []
+                })
                 break
 
 
