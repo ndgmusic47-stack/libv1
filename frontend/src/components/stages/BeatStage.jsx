@@ -15,13 +15,13 @@ export default function BeatStage({ openUpgradeModal, sessionId, sessionData, up
   const [statusMessage, setStatusMessage] = useState(null);
 
   // Poll helper for beat status
-  const pollBeatStatus = async (jobId, { intervalMs = 2000, timeoutMs = 180000 } = {}) => {
+  const pollBeatStatus = async (jobId, { intervalMs = 2000, timeoutMs = 720000 } = {}) => {
     const startTime = Date.now();
     
     while (true) {
       const elapsed = Date.now() - startTime;
       if (elapsed >= timeoutMs) {
-        throw new Error("Beat generation timed out. Please try again.");
+        throw new Error(`Beat generation is taking longer than expected. Beatoven is still composing. Please try again in a moment.`);
       }
       
       const status = await api.getBeatStatus(jobId);
