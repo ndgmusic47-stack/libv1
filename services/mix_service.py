@@ -33,12 +33,10 @@ from utils.mix.config_apply import apply_recipe
 
 from jobs.mix_job_manager import MixJobManager, JOBS
 from services.transport_service import get_transport
+from utils.mix_paths import STORAGE_MIX_OUTPUTS
 
 
 logger = logging.getLogger(__name__)
-
-# Storage directory for mix outputs
-STORAGE_MIX_OUTPUTS = Path("./storage/mix_outputs")
 
 
 class MixService:

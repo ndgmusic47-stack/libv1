@@ -1,7 +1,7 @@
 from models.mix_job_state import MixJobState
 from utils.mix.timeline import add_event
 from config.settings import MEDIA_DIR
-from services.mix_service import STORAGE_MIX_OUTPUTS
+from utils.mix_paths import STORAGE_MIX_OUTPUTS
 import uuid
 import json
 from pathlib import Path

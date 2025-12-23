@@ -188,7 +188,7 @@ async def get_mix_preview(
     
     try:
         from config.settings import MEDIA_DIR
-        from services.mix_service import STORAGE_MIX_OUTPUTS
+        from utils.mix_paths import STORAGE_MIX_OUTPUTS
         
         session_id = project_id
         mix_path = STORAGE_MIX_OUTPUTS / session_id / "final_mix.wav"
