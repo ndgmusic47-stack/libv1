@@ -85,25 +85,27 @@ class BeatService:
             # 1. Call Beatoven compose API
             task_id = await self._call_beatoven_compose(prompt_text)
             
-            # 2. Poll for status and finalize
-            result = await self._poll_beatoven_status(
-                task_id=task_id,
-                session_path=session_path,
-                session_id=session_id,
-                mood=mood,
-                genre=genre,
-                bpm=bpm,
-                db=db
-            )
+            # 2. Store mood/genre in project memory for later use in status checks
+            memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
+            await memory.update_metadata(mood=mood, genre=genre)
             
-            if result:
-                return result
+            # 3. Return immediately with processing status (encode session_id into job_id)
+            job_id = f"{session_id}_{task_id}"
+            log_endpoint_event("/beats/create", session_id, "processing", {"job_id": job_id, "task_id": task_id})
+            
+            return {
+                "session_id": session_id,
+                "job_id": job_id,
+                "status": "processing",
+                "provider": "beatoven",
+                "progress": 0
+            }
         except httpx.RequestError as e:
             logger.warning(f"Beatoven API request failed: {e} - falling back to demo beat")
         except Exception as e:
             logger.warning(f"Beatoven API failed: {e} - falling back to demo beat")
         
-        # FALLBACK: Always return a beat (ALWAYS succeeds)
+        # FALLBACK: Only for hard failures (no API key, auth errors, request errors)
         return await self._handle_fallback_beat(
             session_path=session_path,
             session_id=session_id,
@@ -316,9 +318,15 @@ class BeatService:
             
             # Copy fallback to session
             output_file = session_path / "beat.mp3"
-            shutil.copy(fallback, output_file)
             
-            logger.info(f"⚠️ Beatoven unavailable, using fallback demo beat")
+            # Check if beat.mp3 already exists and has content
+            if output_file.exists() and output_file.stat().st_size > 0:
+                logger.warning(f"Fallback beat not applied because beat.mp3 already exists for session {session_id}")
+                provider = "demo_skipped"
+            else:
+                shutil.copy(fallback, output_file)
+                logger.info(f"⚠️ Beatoven unavailable, using fallback demo beat")
+                provider = "demo"
             
             # Update project memory
             memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
@@ -333,7 +341,7 @@ class BeatService:
                 "bpm": bpm or 120,
                 "mood": mood,
                 "genre": genre,
-                "provider": "demo",
+                "provider": provider,
                 **demo_metadata
             }
             
@@ -347,14 +355,14 @@ class BeatService:
             })
             await memory.save()
             
-            log_endpoint_event("/beats/create", session_id, "success", {"source": "demo", "mood": mood})
+            log_endpoint_event("/beats/create", session_id, "success", {"source": provider, "mood": mood})
             
             return {
                 "session_id": session_id,
                 "url": beat_url,
                 "beat_url": beat_url,
                 "status": "ready",
-                "provider": "demo",
+                "provider": provider,
                 "progress": 100
             }
         
@@ -449,14 +457,169 @@ class BeatService:
             log_endpoint_event("/beats/credits", None, "success", {"credits": 10, "source": "fallback"})
             return {"credits": 10, "source": "fallback"}
     
-    async def get_beat_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+    async def get_beat_status(self, job_id: str, db: Optional[AsyncSession] = None) -> Optional[Dict[str, Any]]:
         """
         Get the status of a beat generation job.
         
+        Args:
+            job_id: Job ID in format "{session_id}_{task_id}"
+            db: Optional database session
+            
         Returns:
-            Dict with job status or None if not found
+            Dict with job status: processing, ready, or error
         """
-        # This is a stub implementation - would need actual job tracking
-        # For now, return None to indicate job not found
-        return None
+        if not self.api_key:
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": "Beatoven API key not configured"
+            }
+        
+        # Parse session_id and task_id from job_id
+        # Format: {session_id}_{task_id}
+        if "_" not in job_id:
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": "Invalid job_id format"
+            }
+        
+        session_id = job_id.rsplit("_", 1)[0]
+        task_id = job_id.rsplit("_", 1)[1]
+        session_path = get_session_media_path(session_id)
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                status_url = f"https://public-api.beatoven.ai/api/v1/tasks/{task_id}"
+                status_res = await client.get(status_url, headers=headers, timeout=30)
+                
+                if not status_res.is_success:
+                    if status_res.status_code in (401, 403):
+                        return {
+                            "status": "error",
+                            "job_id": job_id,
+                            "message": f"Beatoven API authentication failed: {status_res.status_code}"
+                        }
+                    return {
+                        "status": "error",
+                        "job_id": job_id,
+                        "message": f"Beatoven status check failed: {status_res.status_code}"
+                    }
+                
+                status_data = status_res.json()
+                status = status_data.get("status")
+                
+                # Still composing/running/queued
+                if status in ("composing", "running", "queued"):
+                    return {
+                        "status": "processing",
+                        "job_id": job_id,
+                        "progress": 50  # Estimate
+                    }
+                
+                # Composed - download and finalize
+                if status == "composed":
+                    meta = status_data.get("meta", {})
+                    audio_url = meta.get("track_url")
+                    if not audio_url:
+                        return {
+                            "status": "error",
+                            "job_id": job_id,
+                            "message": "Beatoven: track_url missing"
+                        }
+                    
+                    # Download the audio
+                    output_file = session_path / "beat.mp3"
+                    audio_data = await client.get(audio_url, timeout=60)
+                    audio_data.raise_for_status()
+                    with open(output_file, "wb") as f:
+                        f.write(audio_data.content)
+                    
+                    logger.info(f"🎵 Beatoven track ready: {output_file}")
+                    
+                    # Extract metadata from Beatoven response
+                    extracted_metadata = {}
+                    if meta.get("duration"):
+                        extracted_metadata["duration"] = int(meta.get("duration"))
+                    elif meta.get("length"):
+                        extracted_metadata["duration"] = int(meta.get("length"))
+                    
+                    # BPM from meta
+                    extracted_bpm = meta.get("bpm") or meta.get("tempo")
+                    if extracted_bpm:
+                        extracted_bpm = int(extracted_bpm) if isinstance(extracted_bpm, (int, float)) else extracted_bpm
+                        extracted_metadata["bpm"] = extracted_bpm
+                    
+                    # Key from meta
+                    if meta.get("key"):
+                        extracted_metadata["key"] = meta.get("key")
+                    
+                    # Get mood/genre from project memory metadata if available (or use defaults)
+                    memory = await get_or_create_project_memory(session_id, MEDIA_DIR, None, db)
+                    project_mood = memory.project_data.get("metadata", {}).get("mood", "energetic")
+                    project_genre = memory.project_data.get("metadata", {}).get("genre", "hip-hop")
+                    
+                    # Update project memory
+                    await memory.update_metadata(tempo=extracted_bpm, mood=project_mood, genre=project_genre)
+                    beat_url = f"/media/{session_id}/beat.mp3"
+                    await memory.add_asset("beat", beat_url, {"bpm": extracted_bpm, "mood": project_mood, "metadata": extracted_metadata})
+                    await memory.advance_stage("beat", "lyrics")
+                    
+                    # Prepare beat_url and beat_meta for project memory
+                    beat_meta = {
+                        "bpm": extracted_bpm,
+                        "mood": project_mood,
+                        "genre": project_genre,
+                        "provider": "beatoven",
+                        **extracted_metadata
+                    }
+                    
+                    # Auto-save to project memory
+                    if "beat" not in memory.project_data:
+                        memory.project_data["beat"] = {}
+                    memory.project_data["beat"].update({
+                        "url": beat_url,
+                        "meta": beat_meta,
+                        "completed": True
+                    })
+                    await memory.save()
+                    
+                    log_endpoint_event("/beats/status", session_id, "success", {"source": "beatoven", "job_id": job_id})
+                    
+                    return {
+                        "status": "ready",
+                        "job_id": job_id,
+                        "beat_url": beat_url,
+                        "url": beat_url,
+                        "provider": "beatoven",
+                        "progress": 100,
+                        "session_id": session_id
+                    }
+                
+                # Failed or unexpected status
+                return {
+                    "status": "error",
+                    "job_id": job_id,
+                    "message": f"Unexpected Beatoven status: {status}"
+                }
+        
+        except httpx.RequestError as e:
+            logger.error(f"Beatoven status check request error: {e}")
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": f"Beatoven API request failed: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"Beatoven status check error: {e}")
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": f"Beatoven status check failed: {str(e)}"
+            }
 

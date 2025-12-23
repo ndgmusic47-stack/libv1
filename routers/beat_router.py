@@ -107,36 +107,41 @@ async def get_beat_credits():
 
 
 @beat_router.get("/status/{job_id}")
-async def get_beat_status(job_id: str):
+async def get_beat_status(job_id: str, db: AsyncSession = Depends(get_db)):
     """Get the status of a beat generation job"""
-    job = await beat_service.get_beat_status(job_id)
+    job = await beat_service.get_beat_status(job_id, db=db)
     
     if job is None:
-        return error_response(
-            f"Beat job {job_id} not found",
-            status=404,
-            data={}
+        # Return 200 with error status instead of 404
+        return success_response(
+            data={"job_id": job_id, "status": "error", "message": f"Beat job {job_id} not found"},
+            message="Beat job status"
         )
 
     status = job.get("status")
 
-    # If the upstream provider reports an error, surface it as an HTTP error
+    # Return 200 for all statuses (processing, ready, error) instead of 404
     if status == "error":
         error_message = job.get("error") or job.get("message") or f"Beat job {job_id} failed"
-        return error_response(
-            error_message,
-            status=502,
-            data=job
+        # Return 200 with error status encoded in JSON (in-band), not HTTP 5xx
+        return success_response(
+            data={
+                "status": "error",
+                "job_id": job_id,
+                "message": error_message,
+                **{k: v for k, v in job.items() if k not in ["status", "job_id", "message", "error"]}
+            },
+            message=error_message
         )
 
-    # For ready/processing states, return a success response and pass through payload
+    # For ready state
     if status == "ready":
         return success_response(
             data=job,
             message="Beat job ready"
         )
 
-    # Default: treat anything else as in-progress for compatibility
+    # Default: processing state
     return success_response(
         data=job,
         message="Beat job in progress"
